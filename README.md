@@ -13,6 +13,7 @@ Node.js-Server für kostenlose Offline-TTS-Ansagen, die per OwnTone/AirPlay auf 
 - `espeak-ng` als Fallback
 - Piper-Stimmen über die Weboberfläche laden
 - Audiodateien hochladen und vor/nach Ansagen abspielen
+- Audiodateien auch ohne TTS-Text direkt abspielen
 - Aktuelle Ansage-Auswahl als Standard speichern
 - Verlauf anzeigen und mit Backup löschen
 - Automatische Backups bei Konfigurationsänderungen
@@ -62,7 +63,7 @@ http://192.168.150.162:16619
 
 Die Oberfläche ist in Menübereiche aufgeteilt:
 
-- **Ansage**: Text, Zielgeräte, Stimme, Lautstärke, Tempo und Audio vorher/nachher auswählen
+- **Ansage**: Text, Zielgeräte, Stimme, Lautstärke, Tempo, direktes Audio und Audio vorher/nachher auswählen
 - **Einstellungen**: Standardziele, Standardstimme, MQTT, OwnTone und Standard-Audio speichern
 - **Audio**: Audiodateien hochladen und löschen
 - **Stimmen**: Piper-Stimmen laden
@@ -211,6 +212,18 @@ Vorher und nachher:
 }
 ```
 
+Nur Audio ohne TTS-Text:
+
+```json
+{
+  "audio": "gong.wav",
+  "outputNames": ["Wohnzimmer", "Schlafzimmer"],
+  "volume": 45
+}
+```
+
+Auch `audioBefore` und `audioAfter` können ohne `text` gesendet werden. Dann wird nur diese Audiodatei bzw. die Kombination aus beiden Dateien abgespielt.
+
 Alias-Felder funktionieren ebenfalls: `beforeAudio`, `intro`, `introAudio`, `afterAudio`, `outro`, `outroAudio`.
 
 Damit unterschiedliche Dateiformate und Sampleraten sauber an Piper-TTS angehängt werden können, nutzt der Server `ffmpeg`.
@@ -286,6 +299,14 @@ Ansage per HTTP:
 curl -X POST http://127.0.0.1:16619/api/say \
   -H 'content-type: application/json' \
   --data '{"text":"Testansage","outputNames":["Wohnzimmer"],"voice":"de_DE-ramona-low","volume":45,"volumes":{"Wohnzimmer":35}}'
+```
+
+Nur Audio per HTTP:
+
+```bash
+curl -X POST http://127.0.0.1:16619/api/say \
+  -H 'content-type: application/json' \
+  --data '{"audio":"gong.wav","outputNames":["Wohnzimmer"],"volume":45}'
 ```
 
 AirPlay-Geräte neu suchen:

@@ -669,16 +669,80 @@ function firstValue(...values) {
 
 function requestAudioBefore(request) {
   if ('audioBefore' in request || 'beforeAudio' in request || 'intro' in request || 'introAudio' in request) {
-    return firstValue(request.audioBefore, request.beforeAudio, request.intro, request.introAudio);
+    return requestExplicitAudioBefore(request);
   }
   return firstValue(config.audio?.defaultBefore);
 }
 
 function requestAudioAfter(request) {
   if ('audioAfter' in request || 'afterAudio' in request || 'outro' in request || 'outroAudio' in request) {
-    return firstValue(request.audioAfter, request.afterAudio, request.outro, request.outroAudio);
+    return requestExplicitAudioAfter(request);
   }
   return firstValue(config.audio?.defaultAfter);
+}
+
+function requestExplicitAudioBefore(request) {
+  return firstValue(request.audioBefore, request.beforeAudio, request.intro, request.introAudio);
+}
+
+function requestExplicitAudioAfter(request) {
+  return firstValue(request.audioAfter, request.afterAudio, request.outro, request.outroAudio);
+}
+
+function requestDirectAudio(request) {
+  return firstValue(request.audio, request.audioFile, request.sound, request.file);
+}
+
+async function createAudioOnlyPlayback(request) {
+  const direct = requestDirectAudio(request);
+  const before = requestExplicitAudioBefore(request);
+  const after = requestExplicitAudioAfter(request);
+  const names = [];
+
+  if (before) names.push({ role: 'before', name: safeAssetName(before) });
+  if (direct) names.push({ role: 'audio', name: safeAssetName(direct) });
+  if (after) names.push({ role: 'after', name: safeAssetName(after) });
+
+  if (!names.length) throw new Error('Text oder Audiodatei fehlt.');
+
+  const inputs = names.map(item => ({ ...item, file: audioAssetPath(item.name) }));
+  for (const input of inputs) {
+    if (!(await fileExists(input.file))) throw new Error(`Audiodatei nicht gefunden: ${input.name}`);
+  }
+
+  const fileBase = `audio-${nowStamp()}`;
+  const outFile = path.join(LOCAL_AUDIO_DIR, `${fileBase}.wav`);
+  const args = ['-y', '-hide_banner', '-loglevel', 'error'];
+  for (const input of inputs) args.push('-i', input.file);
+
+  if (inputs.length === 1) {
+    args.push('-ar', '44100', '-ac', '1', outFile);
+  } else {
+    const chains = inputs.map((_, index) => `[${index}:a]aformat=sample_rates=44100:channel_layouts=mono[a${index}]`).join(';');
+    const concatInputs = inputs.map((_, index) => `[a${index}]`).join('');
+    args.push(
+      '-filter_complex',
+      `${chains};${concatInputs}concat=n=${inputs.length}:v=0:a=1[out]`,
+      '-map',
+      '[out]',
+      '-ar',
+      '44100',
+      '-ac',
+      '1',
+      outFile
+    );
+  }
+
+  await execFileP('ffmpeg', args, { timeout: 180000, maxBuffer: 2 * 1024 * 1024 });
+  return {
+    fileBase,
+    localPath: outFile,
+    ownTonePath: path.posix.join(config.owntone.audioDirectory, `${fileBase}.wav`),
+    audioOnly: true,
+    audio: direct ? safeAssetName(direct) : '',
+    audioBefore: before ? safeAssetName(before) : '',
+    audioAfter: after ? safeAssetName(after) : ''
+  };
 }
 
 async function combineAudioAttachments(generated, request) {
@@ -822,29 +886,32 @@ async function playTrack(track) {
 }
 
 async function say(request) {
-  const text = sanitizeText(request.text || request.message || request.payload);
+  const rawText = String(request.text || request.message || request.payload || '').trim();
+  const text = rawText ? sanitizeText(rawText) : '';
   const outputs = await resolveOutputs(request);
   await setOutputs(outputs, request);
-  const rawGenerated = await synthesize(text, request);
-  const generated = await combineAudioAttachments(rawGenerated, request);
+  const generated = text
+    ? await combineAudioAttachments(await synthesize(text, request), request)
+    : await createAudioOnlyPlayback(request);
   await cleanupAudioFiles();
   const track = await findTrack(generated);
   const queue = await playTrack(track);
   const entry = {
-    type: 'say',
+    type: generated.audioOnly ? 'audio' : 'say',
     ok: true,
     text,
     outputIds: outputs.map(out => out.id),
     outputNames: outputs.map(out => out.name),
     outputVolumes: Object.fromEntries(outputs.map(out => [out.name, volumeForOutput(out, request)])),
     voice: request.voice || config.tts.voice,
+    audio: generated.audio || '',
     audioBefore: generated.audioBefore || '',
     audioAfter: generated.audioAfter || '',
     file: generated.localPath,
     trackUri: track.uri
   };
   await appendHistory(entry);
-  setStatus(true, `Gespielt: ${outputs.map(out => out.name).join(', ')}`, entry);
+  setStatus(true, `${generated.audioOnly ? 'Audio' : 'Ansage'} gespielt: ${outputs.map(out => out.name).join(', ')}`, entry);
   return { ...entry, queue };
 }
 

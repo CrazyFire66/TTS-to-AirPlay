@@ -112,6 +112,7 @@ function fillAudioSelect(select, selectedValue) {
 }
 
 function fillAudio() {
+  fillAudioSelect($('audioOnly'), '');
   fillAudioSelect($('audioBefore'), currentConfig?.audio?.defaultBefore);
   fillAudioSelect($('audioAfter'), currentConfig?.audio?.defaultAfter);
   fillAudioSelect($('defaultAudioBefore'), currentConfig?.audio?.defaultBefore);
@@ -135,6 +136,7 @@ function selectedAnnouncementOutputNames() {
 
 function renderMqttExample() {
   const outputNames = selectedOutputNames('defaultOutputs');
+  const audioName = $('defaultAudioBefore').value || $('defaultAudioAfter').value || audioFiles[0]?.name || 'gong.wav';
   const example = {
     text: 'Die Waschmaschine ist fertig.',
     outputNames: outputNames.length ? outputNames : ['Wohnzimmer'],
@@ -147,7 +149,18 @@ function renderMqttExample() {
   };
   if (!example.audioBefore) delete example.audioBefore;
   if (!example.audioAfter) delete example.audioAfter;
-  $('mqttExample').textContent = JSON.stringify(example, null, 2);
+  const audioOnly = {
+    audio: audioName,
+    outputNames: outputNames.length ? outputNames : ['Wohnzimmer'],
+    volume: Number($('volume').value || 50)
+  };
+  $('mqttExample').textContent = [
+    'Ansage mit Text:',
+    JSON.stringify(example, null, 2),
+    '',
+    'Nur Audio:',
+    JSON.stringify(audioOnly, null, 2)
+  ].join('\n');
 }
 
 function renderAudioList() {
@@ -263,26 +276,34 @@ async function discoverOutputs() {
 }
 
 async function say() {
+  await play(false);
+}
+
+async function play(audioOnly = false) {
   const selectedOutputIds = Array.from($('output').selectedOptions).map(option => option.value).filter(Boolean);
+  const directAudio = audioOnly ? $('audioOnly').value : '';
   const payload = {
-    text: $('text').value,
+    text: audioOnly ? '' : $('text').value,
     outputIds: selectedOutputIds,
     voice: $('voice').value,
     volume: Number($('volume').value),
-    audioBefore: $('audioBefore').value,
-    audioAfter: $('audioAfter').value,
+    audio: directAudio,
+    audioBefore: audioOnly && directAudio ? '' : $('audioBefore').value,
+    audioAfter: audioOnly && directAudio ? '' : $('audioAfter').value,
     speed: Number($('speed').value)
   };
   try {
     $('sayBtn').disabled = true;
-    setStatus('Erzeuge und spiele Ansage…');
+    $('audioOnlyBtn').disabled = true;
+    setStatus(audioOnly ? 'Spiele Audio…' : 'Erzeuge und spiele Ansage…');
     await api('/api/say', { method: 'POST', body: JSON.stringify(payload) });
-    $('text').value = '';
+    if (!audioOnly) $('text').value = '';
     await refresh();
   } catch (err) {
     setStatus(err.message, true);
   } finally {
     $('sayBtn').disabled = false;
+    $('audioOnlyBtn').disabled = false;
   }
 }
 
@@ -417,6 +438,7 @@ async function sendPin() {
 }
 
 $('sayBtn').addEventListener('click', say);
+$('audioOnlyBtn').addEventListener('click', () => play(true));
 $('saveBtn').addEventListener('click', saveSettings);
 $('saveCurrentBtn').addEventListener('click', saveCurrentAsDefault);
 $('refreshBtn').addEventListener('click', refresh);
@@ -429,6 +451,7 @@ $('defaultOutputs').addEventListener('change', renderMqttExample);
 $('defaultVoice').addEventListener('change', renderMqttExample);
 $('defaultAudioBefore').addEventListener('change', renderMqttExample);
 $('defaultAudioAfter').addEventListener('change', renderMqttExample);
+$('audioOnly').addEventListener('change', renderMqttExample);
 $('volume').addEventListener('input', renderMqttExample);
 $('speed').addEventListener('input', renderMqttExample);
 initNavigation();
