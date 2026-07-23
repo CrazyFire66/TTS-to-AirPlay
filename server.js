@@ -15,6 +15,7 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const DATA_DIR = path.join(ROOT, 'data');
 const BACKUP_DIR = path.join(ROOT, 'backups');
 const LOCAL_AUDIO_DIR = path.join(ROOT, 'audio');
+const AUDIO_ASSET_DIR = path.join(ROOT, 'assets');
 const HISTORY_PATH = path.join(DATA_DIR, 'history.jsonl');
 const DEFAULT_PIPER_MODEL_DIR = '/root/TTS/models/piper';
 
@@ -45,6 +46,11 @@ const DEFAULT_CONFIG = {
     amplitude: 160,
     maxTextLength: 1500,
     keepAudioFiles: 200
+  },
+  audio: {
+    assetsDirectory: AUDIO_ASSET_DIR,
+    defaultBefore: '',
+    defaultAfter: ''
   },
   owntone: {
     baseUrl: 'http://127.0.0.1:3689',
@@ -98,6 +104,7 @@ async function ensureDirs() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
   await fsp.mkdir(BACKUP_DIR, { recursive: true });
   await fsp.mkdir(LOCAL_AUDIO_DIR, { recursive: true });
+  await fsp.mkdir(config?.audio?.assetsDirectory || AUDIO_ASSET_DIR, { recursive: true });
 }
 
 async function loadConfig() {
@@ -164,30 +171,118 @@ function textResponse(res, status, value, contentType = 'text/plain; charset=utf
   res.end(value);
 }
 
-function getRequestBody(req) {
+function getRequestBody(req, limit = 50 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
-    let body = '';
+    const chunks = [];
+    let size = 0;
     req.on('data', chunk => {
-      body += chunk;
-      if (body.length > 1024 * 1024) {
+      chunks.push(chunk);
+      size += chunk.length;
+      if (size > limit) {
         reject(new Error('Request body too large'));
         req.destroy();
       }
     });
-    req.on('end', () => resolve(body));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
 
 async function parseRequestBody(req) {
-  const raw = await getRequestBody(req);
-  if (!raw) return {};
+  const rawBuffer = await getRequestBody(req);
+  if (!rawBuffer.length) return {};
+  const raw = rawBuffer.toString('utf8');
   const type = req.headers['content-type'] || '';
   if (type.includes('application/json')) return JSON.parse(raw);
   if (type.includes('application/x-www-form-urlencoded')) {
     return Object.fromEntries(new URLSearchParams(raw));
   }
   return { text: raw };
+}
+
+function splitBuffer(buffer, separator) {
+  const parts = [];
+  let start = 0;
+  let index = buffer.indexOf(separator, start);
+  while (index !== -1) {
+    parts.push(buffer.subarray(start, index));
+    start = index + separator.length;
+    index = buffer.indexOf(separator, start);
+  }
+  parts.push(buffer.subarray(start));
+  return parts;
+}
+
+function parseContentDisposition(value) {
+  const out = {};
+  for (const part of String(value || '').split(';')) {
+    const [rawKey, ...rest] = part.trim().split('=');
+    if (!rest.length) continue;
+    out[rawKey.toLowerCase()] = rest.join('=').trim().replace(/^"|"$/g, '');
+  }
+  return out;
+}
+
+async function parseMultipart(req) {
+  const type = req.headers['content-type'] || '';
+  const match = type.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!match) throw new Error('Multipart boundary fehlt.');
+  const boundary = Buffer.from(`--${match[1] || match[2]}`);
+  const body = await getRequestBody(req, 80 * 1024 * 1024);
+  const fields = {};
+  const files = [];
+
+  for (let part of splitBuffer(body, boundary)) {
+    if (part.length < 4) continue;
+    if (part.subarray(0, 2).toString() === '\r\n') part = part.subarray(2);
+    if (part.subarray(0, 2).toString() === '--') continue;
+    if (part.subarray(part.length - 2).toString() === '\r\n') part = part.subarray(0, part.length - 2);
+    const headerEnd = part.indexOf(Buffer.from('\r\n\r\n'));
+    if (headerEnd === -1) continue;
+    const headerText = part.subarray(0, headerEnd).toString('utf8');
+    const content = part.subarray(headerEnd + 4);
+    const headers = Object.fromEntries(headerText.split(/\r?\n/).map(line => {
+      const idx = line.indexOf(':');
+      if (idx === -1) return ['', ''];
+      return [line.slice(0, idx).trim().toLowerCase(), line.slice(idx + 1).trim()];
+    }).filter(([key]) => key));
+    const disposition = parseContentDisposition(headers['content-disposition']);
+    if (!disposition.name) continue;
+    if (disposition.filename) {
+      files.push({ field: disposition.name, filename: disposition.filename, contentType: headers['content-type'] || '', content });
+    } else {
+      fields[disposition.name] = content.toString('utf8');
+    }
+  }
+  return { fields, files };
+}
+
+function safeAssetName(value) {
+  const parsed = path.parse(String(value || 'audio.wav'));
+  const base = parsed.name.replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || 'audio';
+  const ext = parsed.ext.toLowerCase() || '.wav';
+  return `${base}${ext}`;
+}
+
+function audioAssetDir() {
+  return config.audio?.assetsDirectory || AUDIO_ASSET_DIR;
+}
+
+function audioAssetPath(name) {
+  const fileName = safeAssetName(name);
+  const full = path.resolve(audioAssetDir(), fileName);
+  const root = path.resolve(audioAssetDir());
+  if (!full.startsWith(`${root}${path.sep}`) && full !== root) throw new Error('Ungueltiger Audiodateiname.');
+  return full;
+}
+
+async function backupBinaryFile(filePath, label) {
+  try {
+    await fsp.mkdir(BACKUP_DIR, { recursive: true });
+    await fsp.copyFile(filePath, path.join(BACKUP_DIR, `${nowStamp()}-${label}-${path.basename(filePath)}`));
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
 }
 
 function authorized(req, url) {
@@ -519,6 +614,113 @@ async function installPiperVoice(request) {
   return installed;
 }
 
+async function listAudioAssets() {
+  await ensureDirs();
+  const dir = audioAssetDir();
+  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+  const files = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const full = path.join(dir, entry.name);
+    const stat = await fsp.stat(full).catch(() => null);
+    if (!stat) continue;
+    files.push({
+      name: entry.name,
+      size: stat.size,
+      mtime: stat.mtime.toISOString()
+    });
+  }
+  return files.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function uploadAudioAsset(req) {
+  await ensureDirs();
+  const { fields, files } = await parseMultipart(req);
+  const file = files.find(item => item.field === 'file') || files[0];
+  if (!file) throw new Error('Audiodatei fehlt.');
+  const name = safeAssetName(fields.name || file.filename);
+  const ext = path.extname(name).toLowerCase();
+  if (!['.wav', '.mp3', '.m4a', '.aac', '.flac', '.ogg'].includes(ext)) {
+    throw new Error('Unterstuetzt werden WAV, MP3, M4A, AAC, FLAC und OGG.');
+  }
+  const target = audioAssetPath(name);
+  await backupBinaryFile(target, 'audio-upload');
+  await fsp.writeFile(target, file.content);
+  const stat = await fsp.stat(target);
+  const asset = { name, size: stat.size, mtime: stat.mtime.toISOString() };
+  await appendHistory({ type: 'audio-upload', ok: true, audio: name, size: stat.size });
+  return asset;
+}
+
+async function deleteAudioAsset(name) {
+  const target = audioAssetPath(name);
+  await backupBinaryFile(target, 'audio-delete');
+  await fsp.unlink(target);
+  await appendHistory({ type: 'audio-delete', ok: true, audio: safeAssetName(name) });
+  return { ok: true, name: safeAssetName(name) };
+}
+
+function firstValue(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+  }
+  return '';
+}
+
+function requestAudioBefore(request) {
+  if ('audioBefore' in request || 'beforeAudio' in request || 'intro' in request || 'introAudio' in request) {
+    return firstValue(request.audioBefore, request.beforeAudio, request.intro, request.introAudio);
+  }
+  return firstValue(config.audio?.defaultBefore);
+}
+
+function requestAudioAfter(request) {
+  if ('audioAfter' in request || 'afterAudio' in request || 'outro' in request || 'outroAudio' in request) {
+    return firstValue(request.audioAfter, request.afterAudio, request.outro, request.outroAudio);
+  }
+  return firstValue(config.audio?.defaultAfter);
+}
+
+async function combineAudioAttachments(generated, request) {
+  const before = requestAudioBefore(request);
+  const after = requestAudioAfter(request);
+  if (!before && !after) return { ...generated, audioBefore: '', audioAfter: '' };
+
+  const inputs = [];
+  if (before) inputs.push({ role: 'before', file: audioAssetPath(before), name: safeAssetName(before) });
+  inputs.push({ role: 'tts', file: generated.localPath, name: path.basename(generated.localPath) });
+  if (after) inputs.push({ role: 'after', file: audioAssetPath(after), name: safeAssetName(after) });
+  for (const input of inputs) {
+    if (!(await fileExists(input.file))) throw new Error(`Audiodatei nicht gefunden: ${input.name}`);
+  }
+
+  const combinedBase = `${generated.fileBase}-audio`;
+  const combinedFile = path.join(LOCAL_AUDIO_DIR, `${combinedBase}.wav`);
+  const args = ['-y', '-hide_banner', '-loglevel', 'error'];
+  for (const input of inputs) args.push('-i', input.file);
+  const chains = inputs.map((_, index) => `[${index}:a]aformat=sample_rates=44100:channel_layouts=mono[a${index}]`).join(';');
+  const concatInputs = inputs.map((_, index) => `[a${index}]`).join('');
+  args.push(
+    '-filter_complex',
+    `${chains};${concatInputs}concat=n=${inputs.length}:v=0:a=1[out]`,
+    '-map',
+    '[out]',
+    '-ar',
+    '44100',
+    '-ac',
+    '1',
+    combinedFile
+  );
+  await execFileP('ffmpeg', args, { timeout: 180000, maxBuffer: 2 * 1024 * 1024 });
+  return {
+    fileBase: combinedBase,
+    localPath: combinedFile,
+    ownTonePath: path.posix.join(config.owntone.audioDirectory, `${combinedBase}.wav`),
+    audioBefore: before ? safeAssetName(before) : '',
+    audioAfter: after ? safeAssetName(after) : ''
+  };
+}
+
 function sanitizeText(text) {
   const value = String(text || '').replace(/\s+/g, ' ').trim();
   if (!value) throw new Error('Text fehlt.');
@@ -623,7 +825,8 @@ async function say(request) {
   const text = sanitizeText(request.text || request.message || request.payload);
   const outputs = await resolveOutputs(request);
   await setOutputs(outputs, request);
-  const generated = await synthesize(text, request);
+  const rawGenerated = await synthesize(text, request);
+  const generated = await combineAudioAttachments(rawGenerated, request);
   await cleanupAudioFiles();
   const track = await findTrack(generated);
   const queue = await playTrack(track);
@@ -635,6 +838,8 @@ async function say(request) {
     outputNames: outputs.map(out => out.name),
     outputVolumes: Object.fromEntries(outputs.map(out => [out.name, volumeForOutput(out, request)])),
     voice: request.voice || config.tts.voice,
+    audioBefore: generated.audioBefore || '',
+    audioAfter: generated.audioAfter || '',
     file: generated.localPath,
     trackUri: track.uri
   };
@@ -736,6 +941,15 @@ async function handleApi(req, res, url) {
       const body = await parseRequestBody(req);
       const result = await enqueueSay(body);
       return jsonResponse(res, 200, result);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/audio') {
+      return jsonResponse(res, 200, { files: await listAudioAssets() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/audio') {
+      return jsonResponse(res, 200, { ok: true, file: await uploadAudioAsset(req), files: await listAudioAssets() });
+    }
+    if (req.method === 'DELETE' && url.pathname === '/api/audio') {
+      return jsonResponse(res, 200, await deleteAudioAsset(url.searchParams.get('name') || ''));
     }
     if (req.method === 'GET' && url.pathname === '/api/outputs') {
       return jsonResponse(res, 200, { outputs: await getOutputs() });

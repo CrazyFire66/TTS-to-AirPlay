@@ -49,6 +49,9 @@ command -v espeak-ng 2>&1 || true
 espeak-ng --voices 2>&1 | sed -n '1,20p' || true
 ls -lh /root/TTS/venv/bin/piper /root/TTS/models/piper/*.onnx /root/TTS/models/piper/*.onnx.json 2>&1 || true
 /root/TTS/venv/bin/piper --help 2>&1 | sed -n '1,20p' || true
+command -v ffmpeg 2>&1 || true
+ffmpeg -version 2>&1 | sed -n '1,3p' || true
+ls -lh /root/TTS/assets 2>&1 || true
 
 echo
 echo "== mqtt broker =="

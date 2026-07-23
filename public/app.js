@@ -2,10 +2,12 @@ const $ = id => document.getElementById(id);
 let currentConfig = null;
 let outputs = [];
 let voices = [];
+let audioFiles = [];
 
 async function api(path, options = {}) {
+  const isForm = options.body instanceof FormData;
   const response = await fetch(path, {
-    headers: { 'content-type': 'application/json', ...(options.headers || {}) },
+    headers: { ...(isForm ? {} : { 'content-type': 'application/json' }), ...(options.headers || {}) },
     ...options
   });
   const data = await response.json();
@@ -91,6 +93,21 @@ function fillVoices() {
   fillVoiceSelect($('defaultVoice'), currentConfig?.tts?.voice);
 }
 
+function fillAudioSelect(select, selectedValue) {
+  select.innerHTML = '';
+  select.append(new Option('Kein Audio', ''));
+  for (const file of audioFiles) select.append(new Option(file.name, file.name));
+  select.value = selectedValue || '';
+}
+
+function fillAudio() {
+  fillAudioSelect($('audioBefore'), currentConfig?.audio?.defaultBefore);
+  fillAudioSelect($('audioAfter'), currentConfig?.audio?.defaultAfter);
+  fillAudioSelect($('defaultAudioBefore'), currentConfig?.audio?.defaultBefore);
+  fillAudioSelect($('defaultAudioAfter'), currentConfig?.audio?.defaultAfter);
+  renderAudioList();
+}
+
 function selectedOutputNames(selectId) {
   return Array.from($(selectId).selectedOptions).map(option => option.value).filter(Boolean);
 }
@@ -113,9 +130,41 @@ function renderMqttExample() {
     voice: $('defaultVoice').value || $('voice').value || 'de_DE-thorsten-medium',
     volume: Number($('volume').value || 50),
     volumes: Object.fromEntries((outputNames.length ? outputNames : ['Wohnzimmer']).map(name => [name, Number($('volume').value || 50)])),
+    audioBefore: $('defaultAudioBefore').value || undefined,
+    audioAfter: $('defaultAudioAfter').value || undefined,
     speed: Number($('speed').value || 165)
   };
+  if (!example.audioBefore) delete example.audioBefore;
+  if (!example.audioAfter) delete example.audioAfter;
   $('mqttExample').textContent = JSON.stringify(example, null, 2);
+}
+
+function renderAudioList() {
+  const node = $('audioList');
+  node.innerHTML = '';
+  if (!audioFiles.length) {
+    const div = document.createElement('div');
+    div.className = 'item muted';
+    div.textContent = 'Noch keine Audiodateien hochgeladen.';
+    node.append(div);
+    return;
+  }
+  for (const file of audioFiles) {
+    const div = document.createElement('div');
+    div.className = 'fileItem';
+    const meta = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = file.name;
+    const small = document.createElement('small');
+    small.textContent = `${Math.round(file.size / 1024)} KB`;
+    meta.append(strong, small);
+    const button = document.createElement('button');
+    button.className = 'dangerBtn';
+    button.textContent = 'Loeschen';
+    button.addEventListener('click', () => deleteAudio(file.name));
+    div.append(meta, button);
+    node.append(div);
+  }
 }
 
 function renderHistory(items) {
@@ -161,20 +210,23 @@ async function clearHistory() {
 async function refresh() {
   try {
     setStatus('Lade...');
-    const [configData, outputData, voiceData, historyData, healthData] = await Promise.all([
+    const [configData, outputData, voiceData, historyData, audioData, healthData] = await Promise.all([
       api('/api/config'),
       api('/api/outputs').catch(err => ({ outputs: [], error: err.message })),
       api('/api/voices'),
       api('/api/history'),
+      api('/api/audio'),
       api('/api/health')
     ]);
     currentConfig = configData;
     outputs = outputData.outputs || [];
     voices = voiceData.voices || [];
+    audioFiles = audioData.files || [];
     fillConfig();
     fillOutputs();
     fillDefaultOutputs();
     fillVoices();
+    fillAudio();
     renderHistory(historyData.history || []);
     renderMqttExample();
     setStatus(healthData.status?.message || 'Bereit', healthData.status?.ok === false);
@@ -190,6 +242,8 @@ async function say() {
     outputIds: selectedOutputIds,
     voice: $('voice').value,
     volume: Number($('volume').value),
+    audioBefore: $('audioBefore').value,
+    audioAfter: $('audioAfter').value,
     speed: Number($('speed').value)
   };
   try {
@@ -240,6 +294,11 @@ async function saveSettings() {
       defaultOutputName: '',
       volume: Number($('volume').value),
       clearQueue: $('clearQueue').checked
+    },
+    audio: {
+      assetsDirectory: currentConfig.audio?.assetsDirectory,
+      defaultBefore: $('defaultAudioBefore').value,
+      defaultAfter: $('defaultAudioAfter').value
     }
   };
   try {
@@ -257,7 +316,42 @@ async function saveCurrentAsDefault() {
   const names = selectedAnnouncementOutputNames();
   for (const option of $('defaultOutputs').options) option.selected = names.includes(option.value);
   $('defaultVoice').value = $('voice').value;
+  $('defaultAudioBefore').value = $('audioBefore').value;
+  $('defaultAudioAfter').value = $('audioAfter').value;
   await saveSettings();
+}
+
+async function uploadAudio() {
+  const file = $('audioFile').files[0];
+  if (!file) {
+    setStatus('Bitte Audiodatei auswaehlen.', true);
+    return;
+  }
+  const form = new FormData();
+  form.append('file', file);
+  form.append('name', $('audioName').value.trim() || file.name);
+  try {
+    $('uploadAudioBtn').disabled = true;
+    setStatus('Lade Audio hoch...');
+    await api('/api/audio', { method: 'POST', body: form });
+    $('audioFile').value = '';
+    $('audioName').value = '';
+    await refresh();
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    $('uploadAudioBtn').disabled = false;
+  }
+}
+
+async function deleteAudio(name) {
+  if (!window.confirm(`${name} wirklich loeschen? Es wird vorher ein Backup gespeichert.`)) return;
+  try {
+    await api(`/api/audio?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await refresh();
+  } catch (err) {
+    setStatus(err.message, true);
+  }
 }
 
 async function installVoice() {
@@ -302,8 +396,11 @@ $('refreshBtn').addEventListener('click', refresh);
 $('pinBtn').addEventListener('click', sendPin);
 $('installVoiceBtn').addEventListener('click', installVoice);
 $('clearHistoryBtn').addEventListener('click', clearHistory);
+$('uploadAudioBtn').addEventListener('click', uploadAudio);
 $('defaultOutputs').addEventListener('change', renderMqttExample);
 $('defaultVoice').addEventListener('change', renderMqttExample);
+$('defaultAudioBefore').addEventListener('change', renderMqttExample);
+$('defaultAudioAfter').addEventListener('change', renderMqttExample);
 $('volume').addEventListener('input', renderMqttExample);
 $('speed').addEventListener('input', renderMqttExample);
 refresh();

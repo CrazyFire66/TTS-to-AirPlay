@@ -12,7 +12,7 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-mkdir -p "${APP_DIR}" "${BACKUP_DIR}" "${APP_DIR}/data" "${SHARED_AUDIO_DIR}"
+mkdir -p "${APP_DIR}" "${BACKUP_DIR}" "${APP_DIR}/data" "${APP_DIR}/assets" "${SHARED_AUDIO_DIR}"
 
 if [[ "${SOURCE_DIR}" != "${APP_DIR}" ]]; then
   if [[ -f "${APP_DIR}/config.json" ]]; then
@@ -23,10 +23,10 @@ fi
 
 cd "${APP_DIR}"
 
-if ! command -v node >/dev/null 2>&1 || ! command -v espeak-ng >/dev/null 2>&1 || ! command -v rsync >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
-  echo "Installiere benoetigte Pakete: nodejs, espeak-ng, rsync, curl, python3"
+if ! command -v node >/dev/null 2>&1 || ! command -v espeak-ng >/dev/null 2>&1 || ! command -v rsync >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "Installiere benoetigte Pakete: nodejs, espeak-ng, rsync, curl, python3, ffmpeg"
   apt-get update
-  apt-get install -y nodejs espeak-ng rsync curl python3
+  apt-get install -y nodejs espeak-ng rsync curl python3 ffmpeg
 fi
 
 if [[ ! -d "${APP_DIR}/venv" ]]; then
@@ -92,6 +92,7 @@ ln -sfn "${SHARED_AUDIO_DIR}" "${APP_DIR}/audio"
 chmod 755 "${APP_DIR}"
 chmod 755 "${SHARED_AUDIO_DIR}"
 chmod 755 "${APP_DIR}/scripts"
+chmod 755 "${APP_DIR}/assets"
 
 node --check "${APP_DIR}/server.js"
 

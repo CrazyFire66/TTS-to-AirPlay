@@ -204,6 +204,10 @@ button:hover {
   margin-top: 16px;
 }
 
+#uploadAudioBtn {
+  margin-top: 16px;
+}
+
 .dangerBtn {
   width: auto;
   border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
@@ -235,6 +239,32 @@ pre {
   overflow: auto;
 }
 
+.fileList {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.fileItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.fileItem > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fileItem strong,
+.fileItem small {
+  overflow-wrap: anywhere;
+}
+
 .item {
   display: grid;
   gap: 4px;
@@ -259,6 +289,7 @@ pre {
   .layout,
   .row,
   .actions,
+  .fileItem,
   .grid {
     grid-template-columns: 1fr;
   }

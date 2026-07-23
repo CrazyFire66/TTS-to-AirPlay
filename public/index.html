@@ -41,6 +41,16 @@
       </div>
       <div class="row">
         <label>
+          Audio vorher
+          <select id="audioBefore"></select>
+        </label>
+        <label>
+          Audio nachher
+          <select id="audioAfter"></select>
+        </label>
+      </div>
+      <div class="row">
+        <label>
           AirPlay PIN
           <input id="airplayPin" inputmode="numeric" autocomplete="one-time-code">
         </label>
@@ -87,6 +97,14 @@
           Audio-Ordner in OwnTone
           <input id="audioDirectory">
         </label>
+        <label>
+          Default Audio vorher
+          <select id="defaultAudioBefore"></select>
+        </label>
+        <label>
+          Default Audio nachher
+          <select id="defaultAudioAfter"></select>
+        </label>
       </div>
       <label class="check">
         <input id="mqttEnabled" type="checkbox">
@@ -120,6 +138,22 @@
         Als Default setzen
       </label>
       <button id="installVoiceBtn">Stimme laden</button>
+    </section>
+
+    <section class="panel">
+      <h2>Audio-Dateien</h2>
+      <div class="grid">
+        <label>
+          Datei
+          <input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.m4a,.aac,.flac,.ogg">
+        </label>
+        <label>
+          Anzeigename
+          <input id="audioName" placeholder="gong.wav">
+        </label>
+      </div>
+      <button id="uploadAudioBtn">Audio hochladen</button>
+      <div id="audioList" class="fileList"></div>
     </section>
 
     <section class="panel mqttPanel">

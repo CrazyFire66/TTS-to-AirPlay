@@ -34,6 +34,11 @@
     "maxTextLength": 1500,
     "keepAudioFiles": 200
   },
+  "audio": {
+    "assetsDirectory": "/root/TTS/assets",
+    "defaultBefore": "",
+    "defaultAfter": ""
+  },
   "owntone": {
     "baseUrl": "http://127.0.0.1:3689",
     "audioDirectory": "/srv/tts-audio",

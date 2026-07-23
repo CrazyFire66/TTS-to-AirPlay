@@ -11,6 +11,7 @@ Node.js-Server fuer kostenlose Offline-TTS-Ansagen, die per OwnTone/AirPlay auf 
 - Piper TTS als kostenlose Offline-Stimme
 - `espeak-ng` als Fallback
 - Neue Piper-Stimmen ueber die Weboberflaeche laden
+- Audiodateien hochladen und vor/nach Ansagen abspielen
 - Verlauf anzeigen und mit Backup loeschen
 - Automatische Backups bei Konfigurationsaenderungen
 - Systemd-Service fuer dauerhaften Betrieb
@@ -133,6 +134,7 @@ JSON Payload:
   "outputNames": ["Wohnzimmer", "Schlafzimmer"],
   "voice": "de_DE-ramona-low",
   "volume": 45,
+  "audioBefore": "gong.wav",
   "speed": 165
 }
 ```
@@ -147,7 +149,8 @@ JSON Payload:
   "volumes": {
     "Wohnzimmer": 30,
     "Schlafzimmer": 55
-  }
+  },
+  "audioBefore": "gong.wav"
 }
 ```
 
@@ -191,6 +194,48 @@ Settings per MQTT aktualisieren:
 ```
 
 Die Weboberflaeche zeigt ein passendes MQTT-JSON-Beispiel fuer die aktuellen Default-Ziele, Stimme und Lautstaerke.
+
+## Audiodateien vor/nach Ansagen
+
+Unter **Audio-Dateien** koennen WAV, MP3, M4A, AAC, FLAC und OGG hochgeladen werden. Die Dateien werden im Serverordner gespeichert:
+
+```text
+/root/TTS/assets
+```
+
+Danach koennen sie in der Ansage als **Audio vorher** oder **Audio nachher** ausgewaehlt werden. Fuer MQTT/API gibt es dieselben Felder:
+
+```json
+{
+  "text": "Es hat geklingelt.",
+  "outputNames": ["Wohnzimmer", "Schlafzimmer"],
+  "audioBefore": "gong.wav",
+  "volume": 45
+}
+```
+
+Audio nach der Ansage:
+
+```json
+{
+  "text": "Die Haustuer wurde geoeffnet.",
+  "audioAfter": "gong.wav"
+}
+```
+
+Vorher und nachher:
+
+```json
+{
+  "text": "Alarmanlage wurde aktiviert.",
+  "audioBefore": "gong.wav",
+  "audioAfter": "gong.wav"
+}
+```
+
+Alias-Felder funktionieren ebenfalls: `beforeAudio`, `intro`, `introAudio`, `afterAudio`, `outro`, `outroAudio`.
+
+Damit unterschiedliche Dateiformate und Sampleraten sauber an Piper-TTS angehaengt werden koennen, nutzt der Server `ffmpeg`.
 
 ## Stimmen
 
@@ -246,6 +291,9 @@ GET    /api/config
 POST   /api/config
 GET    /api/outputs
 POST   /api/outputs/auth
+GET    /api/audio
+POST   /api/audio
+DELETE /api/audio?name=DATEI
 GET    /api/voices
 POST   /api/voices/install
 POST   /api/say

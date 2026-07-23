@@ -3,6 +3,7 @@ venv/
 config.json
 data/
 audio/
+assets/
 backups/
 models/
 *.log
