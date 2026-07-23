@@ -274,6 +274,33 @@ function uniqueOutputs(items) {
   });
 }
 
+function volumeForOutput(output, request) {
+  const fallback = clampInt(request.volume ?? config.owntone.volume, 0, 100, config.owntone.volume);
+  const candidates = [String(output.name || ''), String(output.id || '')].filter(Boolean);
+  const maps = [request.volumes, request.outputVolumes, request.volumeByOutput, request.volumeByName];
+
+  for (const map of maps) {
+    if (!map || Array.isArray(map) || typeof map !== 'object') continue;
+    for (const key of candidates) {
+      if (map[key] !== undefined) return clampInt(map[key], 0, 100, fallback);
+    }
+    const normalizedName = normalizeName(output.name);
+    const foundKey = Object.keys(map).find(key => normalizeName(key) === normalizedName || String(key) === String(output.id));
+    if (foundKey) return clampInt(map[foundKey], 0, 100, fallback);
+  }
+
+  if (Array.isArray(request.outputVolumes)) {
+    const found = request.outputVolumes.find(item => {
+      if (!item || typeof item !== 'object') return false;
+      return candidates.includes(String(item.id || item.outputId || item.output || ''))
+        || normalizeName(item.name || item.outputName) === normalizeName(output.name);
+    });
+    if (found) return clampInt(found.volume, 0, 100, fallback);
+  }
+
+  return fallback;
+}
+
 async function resolveOutputs(request) {
   const outputs = await getOutputs();
   const airplay = outputs.filter(out => String(out.type || '').startsWith('AirPlay'));
@@ -300,15 +327,17 @@ async function resolveOutputs(request) {
   return selected;
 }
 
-async function setOutputs(outputs, volume) {
+async function setOutputs(outputs, request) {
   const ids = outputs.map(out => String(out.id));
   const locked = outputs.filter(out => out.needs_auth_key || out.requires_auth);
   if (locked.length) {
     throw new Error(`AirPlay-Verifikation noetig fuer: ${locked.map(out => out.name).join(', ')}. Bitte in der Webseite Output waehlen, PIN eingeben und "PIN senden" klicken.`);
   }
   await fetchOwnTone('/api/outputs/set', { method: 'PUT', body: { outputs: ids } });
-  const vol = clampInt(volume ?? config.owntone.volume, 0, 100, config.owntone.volume);
-  await Promise.all(ids.map(id => fetchOwnTone(`/api/player/volume?volume=${vol}&output_id=${encodeURIComponent(id)}`, { method: 'PUT' })));
+  await Promise.all(outputs.map(out => {
+    const vol = volumeForOutput(out, request);
+    return fetchOwnTone(`/api/player/volume?volume=${vol}&output_id=${encodeURIComponent(String(out.id))}`, { method: 'PUT' });
+  }));
 }
 
 async function authorizeOutput(outputId, pin) {
@@ -593,7 +622,7 @@ async function playTrack(track) {
 async function say(request) {
   const text = sanitizeText(request.text || request.message || request.payload);
   const outputs = await resolveOutputs(request);
-  await setOutputs(outputs, request.volume);
+  await setOutputs(outputs, request);
   const generated = await synthesize(text, request);
   await cleanupAudioFiles();
   const track = await findTrack(generated);
@@ -604,6 +633,7 @@ async function say(request) {
     text,
     outputIds: outputs.map(out => out.id),
     outputNames: outputs.map(out => out.name),
+    outputVolumes: Object.fromEntries(outputs.map(out => [out.name, volumeForOutput(out, request)])),
     voice: request.voice || config.tts.voice,
     file: generated.localPath,
     trackUri: track.uri

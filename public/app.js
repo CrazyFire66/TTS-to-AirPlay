@@ -112,6 +112,7 @@ function renderMqttExample() {
     outputNames: outputNames.length ? outputNames : ['Wohnzimmer'],
     voice: $('defaultVoice').value || $('voice').value || 'de_DE-thorsten-medium',
     volume: Number($('volume').value || 50),
+    volumes: Object.fromEntries((outputNames.length ? outputNames : ['Wohnzimmer']).map(name => [name, Number($('volume').value || 50)])),
     speed: Number($('speed').value || 165)
   };
   $('mqttExample').textContent = JSON.stringify(example, null, 2);

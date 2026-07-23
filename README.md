@@ -137,6 +137,33 @@ JSON Payload:
 }
 ```
 
+`volume` gilt fuer alle ausgewaehlten HomePods. Einzelne HomePods koennen mit `volumes` ueberschrieben werden:
+
+```json
+{
+  "text": "Haustuer wurde geoeffnet.",
+  "outputNames": ["Wohnzimmer", "Schlafzimmer"],
+  "volume": 40,
+  "volumes": {
+    "Wohnzimmer": 30,
+    "Schlafzimmer": 55
+  }
+}
+```
+
+Die Keys in `volumes` koennen Output-Namen oder OwnTone-Output-IDs sein. Alternativ ist auch eine Liste moeglich:
+
+```json
+{
+  "text": "Test",
+  "outputNames": ["Wohnzimmer", "Schlafzimmer"],
+  "outputVolumes": [
+    { "name": "Wohnzimmer", "volume": 30 },
+    { "name": "Schlafzimmer", "volume": 55 }
+  ]
+}
+```
+
 Mehrere HomePods gleichzeitig:
 
 ```json
@@ -231,7 +258,7 @@ Ansage per HTTP:
 ```bash
 curl -X POST http://127.0.0.1:16619/api/say \
   -H 'content-type: application/json' \
-  --data '{"text":"Testansage","outputNames":["Wohnzimmer"],"voice":"de_DE-ramona-low","volume":45}'
+  --data '{"text":"Testansage","outputNames":["Wohnzimmer"],"voice":"de_DE-ramona-low","volume":45,"volumes":{"Wohnzimmer":35}}'
 ```
 
 Wenn `security.apiToken` gesetzt ist, muss der Token als Header oder Query-Parameter mitgegeben werden:
