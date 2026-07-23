@@ -426,7 +426,7 @@ async function setOutputs(outputs, request) {
   const ids = outputs.map(out => String(out.id));
   const locked = outputs.filter(out => out.needs_auth_key || out.requires_auth);
   if (locked.length) {
-    throw new Error(`AirPlay-Verifikation noetig fuer: ${locked.map(out => out.name).join(', ')}. Bitte in der Webseite Output waehlen, PIN eingeben und "PIN senden" klicken.`);
+    throw new Error(`AirPlay-Verifikation nötig für: ${locked.map(out => out.name).join(', ')}. Bitte in der Webseite Output wählen, PIN eingeben und "PIN senden" klicken.`);
   }
   await fetchOwnTone('/api/outputs/set', { method: 'PUT', body: { outputs: ids } });
   await Promise.all(outputs.map(out => {
@@ -555,7 +555,7 @@ function downloadFile(sourceUrl, destination) {
       }
       if (res.statusCode < 200 || res.statusCode >= 300) {
         res.resume();
-        reject(new Error(`Download fehlgeschlagen (${res.statusCode}) fuer ${sourceUrl}`));
+        reject(new Error(`Download fehlgeschlagen (${res.statusCode}) für ${sourceUrl}`));
         return;
       }
       const file = fs.createWriteStream(destination);
@@ -563,7 +563,7 @@ function downloadFile(sourceUrl, destination) {
       file.on('finish', () => file.close(resolve));
       file.on('error', reject);
     });
-    req.on('timeout', () => req.destroy(new Error(`Timeout fuer ${sourceUrl}`)));
+    req.on('timeout', () => req.destroy(new Error(`Timeout für ${sourceUrl}`)));
     req.on('error', reject);
   });
 }
@@ -895,8 +895,22 @@ async function clearHistory() {
   await ensureDirs();
   await backupFile(HISTORY_PATH, 'history-clear');
   await fsp.writeFile(HISTORY_PATH, '', 'utf8');
-  setStatus(true, 'Verlauf geloescht');
+  setStatus(true, 'Verlauf gelöscht');
   return { ok: true, backupDir: BACKUP_DIR };
+}
+
+async function refreshAirPlayOutputs() {
+  let service = 'owntone';
+  try {
+    await execFileP('systemctl', ['restart', service]);
+  } catch (err) {
+    service = 'forked-daapd';
+    await execFileP('systemctl', ['restart', service]);
+  }
+  await wait(5000);
+  const outputs = await getOutputs();
+  setStatus(true, `AirPlay Geräte gesucht: ${outputs.length} Ausgänge gefunden`);
+  return { ok: true, service, outputs };
 }
 
 async function serveStatic(url, res) {
@@ -953,6 +967,9 @@ async function handleApi(req, res, url) {
     }
     if (req.method === 'GET' && url.pathname === '/api/outputs') {
       return jsonResponse(res, 200, { outputs: await getOutputs() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/outputs/refresh') {
+      return jsonResponse(res, 200, await refreshAirPlayOutputs());
     }
     if (req.method === 'POST' && url.pathname === '/api/outputs/auth') {
       const body = await parseRequestBody(req);

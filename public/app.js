@@ -20,6 +20,17 @@ function setStatus(message, error = false) {
   $('status').className = error ? 'error' : '';
 }
 
+function showView(name) {
+  document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.dataset.view === name));
+  document.querySelectorAll('.navButton').forEach(button => button.classList.toggle('active', button.dataset.viewTarget === name));
+}
+
+function initNavigation() {
+  document.querySelectorAll('.navButton').forEach(button => {
+    button.addEventListener('click', () => showView(button.dataset.viewTarget));
+  });
+}
+
 function fillConfig() {
   $('mqttEnabled').checked = Boolean(currentConfig.mqtt.enabled);
   $('mqttHost').value = currentConfig.mqtt.host || '';
@@ -46,7 +57,7 @@ function fillOutputs() {
   select.innerHTML = '';
   select.append(new Option('Default', ''));
   for (const out of outputs) {
-    const auth = out.needs_auth_key || out.requires_auth ? ', PIN noetig' : '';
+    const auth = out.needs_auth_key || out.requires_auth ? ', PIN nötig' : '';
     const label = `${out.name} (${out.type}${out.selected ? ', aktiv' : ''}${auth})`;
     select.append(new Option(label, out.id));
   }
@@ -160,7 +171,7 @@ function renderAudioList() {
     meta.append(strong, small);
     const button = document.createElement('button');
     button.className = 'dangerBtn';
-    button.textContent = 'Loeschen';
+    button.textContent = 'Löschen';
     button.addEventListener('click', () => deleteAudio(file.name));
     div.append(meta, button);
     node.append(div);
@@ -194,10 +205,10 @@ function renderHistory(items) {
 }
 
 async function clearHistory() {
-  if (!window.confirm('Verlauf wirklich loeschen? Es wird vorher ein Backup im TTS-Ordner gespeichert.')) return;
+  if (!window.confirm('Verlauf wirklich löschen? Es wird vorher ein Backup im TTS-Ordner gespeichert.')) return;
   try {
     $('clearHistoryBtn').disabled = true;
-    setStatus('Loesche Verlauf...');
+    setStatus('Lösche Verlauf…');
     await api('/api/history', { method: 'DELETE' });
     await refresh();
   } catch (err) {
@@ -209,7 +220,7 @@ async function clearHistory() {
 
 async function refresh() {
   try {
-    setStatus('Lade...');
+    setStatus('Lade…');
     const [configData, outputData, voiceData, historyData, audioData, healthData] = await Promise.all([
       api('/api/config'),
       api('/api/outputs').catch(err => ({ outputs: [], error: err.message })),
@@ -235,6 +246,22 @@ async function refresh() {
   }
 }
 
+async function discoverOutputs() {
+  try {
+    $('discoverBtn').disabled = true;
+    setStatus('Suche AirPlay Geräte…');
+    const data = await api('/api/outputs/refresh', { method: 'POST', body: JSON.stringify({}) });
+    outputs = data.outputs || [];
+    fillOutputs();
+    fillDefaultOutputs();
+    setStatus(`AirPlay Geräte gesucht: ${outputs.length} Ausgänge gefunden`);
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    $('discoverBtn').disabled = false;
+  }
+}
+
 async function say() {
   const selectedOutputIds = Array.from($('output').selectedOptions).map(option => option.value).filter(Boolean);
   const payload = {
@@ -248,7 +275,7 @@ async function say() {
   };
   try {
     $('sayBtn').disabled = true;
-    setStatus('Erzeuge und spiele Ansage...');
+    setStatus('Erzeuge und spiele Ansage…');
     await api('/api/say', { method: 'POST', body: JSON.stringify(payload) });
     $('text').value = '';
     await refresh();
@@ -324,7 +351,7 @@ async function saveCurrentAsDefault() {
 async function uploadAudio() {
   const file = $('audioFile').files[0];
   if (!file) {
-    setStatus('Bitte Audiodatei auswaehlen.', true);
+    setStatus('Bitte Audiodatei auswählen.', true);
     return;
   }
   const form = new FormData();
@@ -332,7 +359,7 @@ async function uploadAudio() {
   form.append('name', $('audioName').value.trim() || file.name);
   try {
     $('uploadAudioBtn').disabled = true;
-    setStatus('Lade Audio hoch...');
+    setStatus('Lade Audio hoch…');
     await api('/api/audio', { method: 'POST', body: form });
     $('audioFile').value = '';
     $('audioName').value = '';
@@ -345,7 +372,7 @@ async function uploadAudio() {
 }
 
 async function deleteAudio(name) {
-  if (!window.confirm(`${name} wirklich loeschen? Es wird vorher ein Backup gespeichert.`)) return;
+  if (!window.confirm(`${name} wirklich löschen? Es wird vorher ein Backup gespeichert.`)) return;
   try {
     await api(`/api/audio?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
     await refresh();
@@ -363,7 +390,7 @@ async function installVoice() {
   };
   try {
     $('installVoiceBtn').disabled = true;
-    setStatus('Lade Stimme...');
+    setStatus('Lade Stimme…');
     await api('/api/voices/install', { method: 'POST', body: JSON.stringify(payload) });
     await refresh();
   } catch (err) {
@@ -393,6 +420,7 @@ $('sayBtn').addEventListener('click', say);
 $('saveBtn').addEventListener('click', saveSettings);
 $('saveCurrentBtn').addEventListener('click', saveCurrentAsDefault);
 $('refreshBtn').addEventListener('click', refresh);
+$('discoverBtn').addEventListener('click', discoverOutputs);
 $('pinBtn').addEventListener('click', sendPin);
 $('installVoiceBtn').addEventListener('click', installVoice);
 $('clearHistoryBtn').addEventListener('click', clearHistory);
@@ -403,4 +431,5 @@ $('defaultAudioBefore').addEventListener('change', renderMqttExample);
 $('defaultAudioAfter').addEventListener('change', renderMqttExample);
 $('volume').addEventListener('input', renderMqttExample);
 $('speed').addEventListener('input', renderMqttExample);
+initNavigation();
 refresh();

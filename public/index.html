@@ -10,13 +10,25 @@
   <header class="topbar">
     <div>
       <h1>HomePod TTS</h1>
-      <p id="status">Verbinde...</p>
+      <p id="status">Verbinde…</p>
     </div>
-    <button id="refreshBtn" title="Aktualisieren">↻</button>
+    <div class="topActions">
+      <button id="discoverBtn">AirPlay Geräte suchen</button>
+      <button id="refreshBtn" title="Aktualisieren">↻</button>
+    </div>
   </header>
 
+  <nav class="navBar" aria-label="Bereiche">
+    <button class="navButton active" data-view-target="speak">Ansage</button>
+    <button class="navButton" data-view-target="settings">Einstellungen</button>
+    <button class="navButton" data-view-target="audio">Audio</button>
+    <button class="navButton" data-view-target="voices">Stimmen</button>
+    <button class="navButton" data-view-target="mqtt">MQTT</button>
+    <button class="navButton" data-view-target="history">Verlauf</button>
+  </nav>
+
   <main class="layout">
-    <section class="panel speak">
+    <section class="panel view active speak" data-view="speak">
       <h2>Ansage</h2>
       <textarea id="text" rows="6" placeholder="Text eingeben"></textarea>
       <div class="row">
@@ -31,7 +43,7 @@
       </div>
       <div class="row">
         <label>
-          Lautstaerke
+          Lautstärke
           <input id="volume" type="number" min="0" max="100">
         </label>
         <label>
@@ -62,15 +74,15 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel view" data-view="settings">
       <h2>Einstellungen</h2>
       <div class="grid">
         <label>
-          Default Ziele
+          Standardziele
           <select id="defaultOutputs" multiple size="7"></select>
         </label>
         <label>
-          Default Stimme
+          Standardstimme
           <select id="defaultVoice"></select>
         </label>
         <label>
@@ -98,11 +110,11 @@
           <input id="audioDirectory">
         </label>
         <label>
-          Default Audio vorher
+          Standard-Audio vorher
           <select id="defaultAudioBefore"></select>
         </label>
         <label>
-          Default Audio nachher
+          Standard-Audio nachher
           <select id="defaultAudioAfter"></select>
         </label>
       </div>
@@ -117,7 +129,23 @@
       <button id="saveBtn">Einstellungen speichern</button>
     </section>
 
-    <section class="panel">
+    <section class="panel view" data-view="audio">
+      <h2>Audio-Dateien</h2>
+      <div class="grid">
+        <label>
+          Datei
+          <input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.m4a,.aac,.flac,.ogg">
+        </label>
+        <label>
+          Anzeigename
+          <input id="audioName" placeholder="gong.wav">
+        </label>
+      </div>
+      <button id="uploadAudioBtn">Audio hochladen</button>
+      <div id="audioList" class="fileList"></div>
+    </section>
+
+    <section class="panel view" data-view="voices">
       <h2>Stimmen</h2>
       <div class="grid">
         <label>
@@ -135,33 +163,17 @@
       </div>
       <label class="check">
         <input id="voiceSetDefault" type="checkbox" checked>
-        Als Default setzen
+        Als Standard setzen
       </label>
       <button id="installVoiceBtn">Stimme laden</button>
     </section>
 
-    <section class="panel">
-      <h2>Audio-Dateien</h2>
-      <div class="grid">
-        <label>
-          Datei
-          <input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.m4a,.aac,.flac,.ogg">
-        </label>
-        <label>
-          Anzeigename
-          <input id="audioName" placeholder="gong.wav">
-        </label>
-      </div>
-      <button id="uploadAudioBtn">Audio hochladen</button>
-      <div id="audioList" class="fileList"></div>
-    </section>
-
-    <section class="panel mqttPanel">
+    <section class="panel view mqttPanel" data-view="mqtt">
       <h2>MQTT JSON Payload</h2>
       <pre id="mqttExample"></pre>
     </section>
 
-    <section class="panel historyPanel">
+    <section class="panel view historyPanel" data-view="history">
       <div class="panelHeader">
         <h2>Verlauf</h2>
         <button id="clearHistoryBtn" class="dangerBtn">Verlauf löschen</button>

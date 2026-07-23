@@ -1,24 +1,26 @@
 # TTS to AirPlay
 
-Node.js-Server fuer kostenlose Offline-TTS-Ansagen, die per OwnTone/AirPlay auf HomePods ausgegeben werden. Texte koennen ueber die Weboberflaeche oder per MQTT gesendet werden.
+Node.js-Server für kostenlose Offline-TTS-Ansagen, die per OwnTone/AirPlay auf HomePods ausgegeben werden. Texte können über die moderne Weboberfläche oder per MQTT gesendet werden.
 
 ## Funktionen
 
-- Web UI fuer Ansagen, HomePod-Auswahl, Standardziele, Lautstaerke und Stimmen
-- Aktuelle Ansage-Auswahl als Standard speichern
-- MQTT-Eingang fuer Automationen, z. B. Home Assistant, ioBroker oder Node-RED
+- Weboberfläche mit Menübereichen für Ansage, Einstellungen, Audio, Stimmen, MQTT und Verlauf
+- AirPlay-Geräte über die Webseite neu suchen
+- MQTT-Eingang für Automationen, z. B. Home Assistant, ioBroker oder Node-RED
 - Mehrere HomePods gleichzeitig per `outputNames`
+- Separate Lautstärke pro Lautsprecher per `volumes`
 - Piper TTS als kostenlose Offline-Stimme
 - `espeak-ng` als Fallback
-- Neue Piper-Stimmen ueber die Weboberflaeche laden
+- Piper-Stimmen über die Weboberfläche laden
 - Audiodateien hochladen und vor/nach Ansagen abspielen
-- Verlauf anzeigen und mit Backup loeschen
-- Automatische Backups bei Konfigurationsaenderungen
-- Systemd-Service fuer dauerhaften Betrieb
+- Aktuelle Ansage-Auswahl als Standard speichern
+- Verlauf anzeigen und mit Backup löschen
+- Automatische Backups bei Konfigurationsänderungen
+- Systemd-Service für dauerhaften Betrieb
 
 ## Architektur
 
-HomePods werden nicht direkt vom Node.js-Prozess angesteuert. OwnTone uebernimmt AirPlay/AirPlay 2 und stellt eine lokale HTTP-API bereit. Diese App erzeugt eine WAV-Datei mit Piper, legt sie in `/srv/tts-audio` ab, waehlt die gewuenschten OwnTone-Ausgaenge und startet die Wiedergabe.
+HomePods werden nicht direkt vom Node.js-Prozess angesteuert. OwnTone übernimmt AirPlay/AirPlay 2 und stellt eine lokale HTTP-API bereit. Diese App erzeugt eine WAV-Datei mit Piper, hängt bei Bedarf Intro-/Outro-Audio an, legt die fertige Datei in `/srv/tts-audio` ab, wählt die gewünschten OwnTone-Ausgänge und startet die Wiedergabe.
 
 ```text
 Web UI / MQTT
@@ -27,7 +29,7 @@ Web UI / MQTT
 Node.js TTS Server
     |
     v
-Piper erzeugt WAV -> /srv/tts-audio
+Piper + optionale Audiodateien -> /srv/tts-audio
     |
     v
 OwnTone -> AirPlay -> HomePods
@@ -44,27 +46,40 @@ cd /root/TTS
 bash scripts/install.sh
 ```
 
-Danach die Weboberflaeche oeffnen:
+Weboberfläche:
 
 ```text
 http://SERVER-IP:16619
 ```
 
-Im aktuellen Heimnetz ist die vorkonfigurierte Adresse:
+Beispiel:
 
 ```text
 http://192.168.150.162:16619
 ```
 
+## Weboberfläche
+
+Die Oberfläche ist in Menübereiche aufgeteilt:
+
+- **Ansage**: Text, Zielgeräte, Stimme, Lautstärke, Tempo und Audio vorher/nachher auswählen
+- **Einstellungen**: Standardziele, Standardstimme, MQTT, OwnTone und Standard-Audio speichern
+- **Audio**: Audiodateien hochladen und löschen
+- **Stimmen**: Piper-Stimmen laden
+- **MQTT**: Beispiel-Payload passend zu den aktuellen Einstellungen
+- **Verlauf**: Verlauf ansehen und mit Backup löschen
+
+Mit **AirPlay Geräte suchen** wird OwnTone neu gestartet und danach die aktuelle Ausgabeliste neu geladen.
+
 ## OwnTone
 
-OwnTone muss den Audio-Ordner scannen:
+OwnTone muss diesen Audio-Ordner scannen:
 
 ```text
 /srv/tts-audio
 ```
 
-Falls OwnTone Ansagen nicht findet, in `/etc/owntone.conf` den Library-Ordner pruefen:
+Falls OwnTone Ansagen nicht findet, in `/etc/owntone.conf` den Library-Ordner prüfen:
 
 ```text
 directories = { "/srv/tts-audio" }
@@ -84,39 +99,15 @@ Die aktive Konfiguration liegt hier:
 /root/TTS/config.json
 ```
 
-Wichtige Standardwerte:
+Standard-HomePods sollten über Namen gesetzt werden, nicht über IDs. Das geht in der Weboberfläche unter **Einstellungen -> Standardziele**.
 
-```json
-{
-  "mqtt": {
-    "host": "192.168.150.156",
-    "topics": {
-      "say": "tts/say",
-      "settings": "tts/settings",
-      "status": "tts/status"
-    }
-  },
-  "tts": {
-    "engine": "piper",
-    "voice": "de_DE-thorsten-medium"
-  },
-  "owntone": {
-    "baseUrl": "http://127.0.0.1:3689",
-    "audioDirectory": "/srv/tts-audio",
-    "defaultOutputNames": ["Wohnzimmer"],
-    "volume": 35
-  }
-}
-```
+Mit **Auswahl als Standard speichern** wird die aktuelle Ansage-Auswahl dauerhaft gespeichert:
 
-Standard-HomePods sollten ueber Namen gesetzt werden, nicht ueber IDs. Das geht direkt in der Weboberflaeche unter **Einstellungen -> Default Ziele**.
-
-In der Ansage-Box kann die aktuelle Auswahl mit **Auswahl als Standard speichern** dauerhaft gespeichert werden. Gespeichert werden:
-
-- gewaehlte Geraete
+- gewählte Geräte
 - Stimme/Sprache
-- Lautstaerke
+- Lautstärke
 - Tempo
+- Audio vorher/nachher
 
 ## MQTT
 
@@ -130,7 +121,7 @@ JSON Payload:
 
 ```json
 {
-  "text": "Haustuer wurde geoeffnet.",
+  "text": "Haustür wurde geöffnet.",
   "outputNames": ["Wohnzimmer", "Schlafzimmer"],
   "voice": "de_DE-ramona-low",
   "volume": 45,
@@ -139,11 +130,11 @@ JSON Payload:
 }
 ```
 
-`volume` gilt fuer alle ausgewaehlten HomePods. Einzelne HomePods koennen mit `volumes` ueberschrieben werden:
+`volume` gilt für alle ausgewählten HomePods. Einzelne HomePods können mit `volumes` überschrieben werden:
 
 ```json
 {
-  "text": "Haustuer wurde geoeffnet.",
+  "text": "Haustür wurde geöffnet.",
   "outputNames": ["Wohnzimmer", "Schlafzimmer"],
   "volume": 40,
   "volumes": {
@@ -154,7 +145,7 @@ JSON Payload:
 }
 ```
 
-Die Keys in `volumes` koennen Output-Namen oder OwnTone-Output-IDs sein. Alternativ ist auch eine Liste moeglich:
+Die Keys in `volumes` können Output-Namen oder OwnTone-Output-IDs sein. Alternativ ist auch eine Liste möglich:
 
 ```json
 {
@@ -164,17 +155,6 @@ Die Keys in `volumes` koennen Output-Namen oder OwnTone-Output-IDs sein. Alterna
     { "name": "Wohnzimmer", "volume": 30 },
     { "name": "Schlafzimmer", "volume": 55 }
   ]
-}
-```
-
-Mehrere HomePods gleichzeitig:
-
-```json
-{
-  "text": "Guten Morgen.",
-  "outputNames": ["Wohnzimmer", "Schlafzimmer"],
-  "volume": 50,
-  "speed": 180
 }
 ```
 
@@ -193,17 +173,15 @@ Settings per MQTT aktualisieren:
 }
 ```
 
-Die Weboberflaeche zeigt ein passendes MQTT-JSON-Beispiel fuer die aktuellen Default-Ziele, Stimme und Lautstaerke.
-
 ## Audiodateien vor/nach Ansagen
 
-Unter **Audio-Dateien** koennen WAV, MP3, M4A, AAC, FLAC und OGG hochgeladen werden. Die Dateien werden im Serverordner gespeichert:
+Unter **Audio-Dateien** können WAV, MP3, M4A, AAC, FLAC und OGG hochgeladen werden. Die Dateien werden hier gespeichert:
 
 ```text
 /root/TTS/assets
 ```
 
-Danach koennen sie in der Ansage als **Audio vorher** oder **Audio nachher** ausgewaehlt werden. Fuer MQTT/API gibt es dieselben Felder:
+MQTT/API-Beispiel mit Audio vorher:
 
 ```json
 {
@@ -218,7 +196,7 @@ Audio nach der Ansage:
 
 ```json
 {
-  "text": "Die Haustuer wurde geoeffnet.",
+  "text": "Die Haustür wurde geöffnet.",
   "audioAfter": "gong.wav"
 }
 ```
@@ -235,7 +213,7 @@ Vorher und nachher:
 
 Alias-Felder funktionieren ebenfalls: `beforeAudio`, `intro`, `introAudio`, `afterAudio`, `outro`, `outroAudio`.
 
-Damit unterschiedliche Dateiformate und Sampleraten sauber an Piper-TTS angehaengt werden koennen, nutzt der Server `ffmpeg`.
+Damit unterschiedliche Dateiformate und Sampleraten sauber an Piper-TTS angehängt werden können, nutzt der Server `ffmpeg`.
 
 ## Stimmen
 
@@ -252,7 +230,7 @@ de_DE-kerstin-low
 de_DE-ramona-low
 ```
 
-Neue Stimmen koennen ueber die Weboberflaeche geladen werden. Benoetigt werden:
+Neue Stimmen können über die Weboberfläche geladen werden. Benötigt werden:
 
 - Name, z. B. `de_DE-ramona-low`
 - Modell-URL, z. B. `.onnx`
@@ -279,9 +257,9 @@ Der Verlauf liegt in:
 /root/TTS/data/history.jsonl
 ```
 
-In der Weboberflaeche kann der Verlauf geloescht werden. Vorher wird automatisch ein Backup nach `/root/TTS/backups` geschrieben.
+In der Weboberfläche kann der Verlauf gelöscht werden. Vorher wird automatisch ein Backup nach `/root/TTS/backups` geschrieben.
 
-Auch Konfigurationsaenderungen und ueberschriebene Stimmen werden vor dem Aendern gesichert.
+Auch Konfigurationsänderungen, gelöschte Verläufe, überschriebenen Stimmen und Audiodateien werden vor dem Ändern gesichert.
 
 ## API
 
@@ -290,6 +268,7 @@ GET    /api/health
 GET    /api/config
 POST   /api/config
 GET    /api/outputs
+POST   /api/outputs/refresh
 POST   /api/outputs/auth
 GET    /api/audio
 POST   /api/audio
@@ -307,6 +286,12 @@ Ansage per HTTP:
 curl -X POST http://127.0.0.1:16619/api/say \
   -H 'content-type: application/json' \
   --data '{"text":"Testansage","outputNames":["Wohnzimmer"],"voice":"de_DE-ramona-low","volume":45,"volumes":{"Wohnzimmer":35}}'
+```
+
+AirPlay-Geräte neu suchen:
+
+```bash
+curl -X POST http://127.0.0.1:16619/api/outputs/refresh
 ```
 
 Wenn `security.apiToken` gesetzt ist, muss der Token als Header oder Query-Parameter mitgegeben werden:
@@ -328,7 +313,7 @@ cd /root/TTS
 bash scripts/diagnose.sh
 ```
 
-Nuetzliche Checks:
+Nützliche Checks:
 
 ```bash
 systemctl status homepod-tts
@@ -337,24 +322,6 @@ curl http://127.0.0.1:16619/api/health
 curl http://127.0.0.1:16619/api/outputs
 curl http://127.0.0.1:3689/api/outputs
 ```
-
-## Troubleshooting
-
-**Ansage wird erzeugt, aber nicht abgespielt**
-
-OwnTone scannt wahrscheinlich `/srv/tts-audio` nicht oder hat keinen Zugriff auf den Ordner.
-
-**HomePod erscheint nicht**
-
-Avahi/mDNS und OwnTone muessen im selben Netzwerk wie der HomePod laufen. Bei VLANs oder Docker-Setups muss mDNS weitergeleitet werden.
-
-**Piper-Stimme klingt nicht oder wirft Fehler**
-
-Modell und Config muessen zusammenpassen. Eine `.onnx`-Datei hat normalerweise mehrere zehn MB; wenn sie nur wenige KB gross ist, wurde vermutlich eine HTML-Fehlerseite heruntergeladen.
-
-**AirPlay PIN erforderlich**
-
-In der Weboberflaeche den betroffenen Output markieren, PIN eingeben und **PIN senden** klicken.
 
 ## Entwicklung
 
@@ -370,4 +337,4 @@ Start:
 npm start
 ```
 
-Der Server nutzt bewusst keine npm-Abhaengigkeiten. MQTT, HTTP und OwnTone-Anbindung sind in `server.js` implementiert.
+Der Server nutzt bewusst keine npm-Abhängigkeiten. MQTT, HTTP, Datei-Upload und OwnTone-Anbindung sind in `server.js` implementiert.
