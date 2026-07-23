@@ -178,6 +178,17 @@ button:hover {
   background: var(--accent-dark);
 }
 
+.actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.actions .primary {
+  margin-top: 0;
+}
+
 #refreshBtn {
   width: 42px;
   height: 42px;
@@ -247,6 +258,7 @@ pre {
 @media (max-width: 820px) {
   .layout,
   .row,
+  .actions,
   .grid {
     grid-template-columns: 1fr;
   }

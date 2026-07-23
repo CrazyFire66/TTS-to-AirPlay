@@ -333,6 +333,11 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, n));
 }
 
+function piperLengthScaleFromSpeed(value) {
+  const speed = clampInt(value, 80, 450, 165);
+  return clampNumber(165 / speed, 0.5, 2.0, 1.0);
+}
+
 function safeVoiceName(value) {
   return String(value || '')
     .replace(/\.onnx(\.json)?$/i, '')
@@ -504,13 +509,16 @@ async function synthesize(text, request) {
     const command = config.tts.piperCommand || '/root/TTS/venv/bin/piper';
     const model = selectedVoice.model;
     const modelConfig = selectedVoice.config || config.tts.piperConfig;
+    const lengthScale = request.lengthScale === undefined
+      ? piperLengthScaleFromSpeed(request.speed ?? config.tts.speed)
+      : clampNumber(request.lengthScale, 0.5, 2.0, 1.0);
     if (!model) throw new Error('Piper Modell fehlt in tts.piperModel.');
     const inputFile = path.join(DATA_DIR, `${fileBase}.txt`);
     const args = [
       '-m', model,
       '-i', inputFile,
       '-f', outFile,
-      '--length-scale', String(clampNumber(request.lengthScale ?? config.tts.piperLengthScale, 0.5, 2.0, 1.0)),
+      '--length-scale', String(lengthScale),
       '--noise-scale', String(clampNumber(request.noiseScale ?? config.tts.piperNoiseScale, 0.0, 2.0, 0.667)),
       '--noise-w-scale', String(clampNumber(request.noiseWScale ?? config.tts.piperNoiseWScale, 0.0, 2.0, 0.8))
     ];

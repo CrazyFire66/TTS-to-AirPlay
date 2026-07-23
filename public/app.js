@@ -95,13 +95,24 @@ function selectedOutputNames(selectId) {
   return Array.from($(selectId).selectedOptions).map(option => option.value).filter(Boolean);
 }
 
+function selectedVoice(value) {
+  return voices.find(voice => voice.voice === value);
+}
+
+function selectedAnnouncementOutputNames() {
+  const selectedIds = Array.from($('output').selectedOptions).map(option => option.value).filter(Boolean);
+  const names = selectedIds.map(id => outputs.find(out => String(out.id) === String(id))?.name).filter(Boolean);
+  return names.length ? names : currentDefaultOutputNames();
+}
+
 function renderMqttExample() {
   const outputNames = selectedOutputNames('defaultOutputs');
   const example = {
     text: 'Die Waschmaschine ist fertig.',
     outputNames: outputNames.length ? outputNames : ['Wohnzimmer'],
     voice: $('defaultVoice').value || $('voice').value || 'de_DE-thorsten-medium',
-    volume: Number($('volume').value || 50)
+    volume: Number($('volume').value || 50),
+    speed: Number($('speed').value || 165)
   };
   $('mqttExample').textContent = JSON.stringify(example, null, 2);
 }
@@ -194,7 +205,7 @@ async function say() {
 }
 
 async function saveSettings() {
-  const selectedVoice = voices.find(voice => voice.voice === $('defaultVoice').value);
+  const voice = selectedVoice($('defaultVoice').value);
   const payload = {
     mqtt: {
       enabled: $('mqttEnabled').checked,
@@ -207,13 +218,13 @@ async function saveSettings() {
       }
     },
     tts: {
-      engine: selectedVoice?.engine || currentConfig.tts.engine || 'piper',
+      engine: voice?.engine || currentConfig.tts.engine || 'piper',
       voice: $('defaultVoice').value,
       speed: Number($('speed').value),
       piperCommand: currentConfig.tts.piperCommand,
       piperModelDir: currentConfig.tts.piperModelDir,
-      piperModel: selectedVoice?.model || currentConfig.tts.piperModel,
-      piperConfig: selectedVoice?.config || currentConfig.tts.piperConfig,
+      piperModel: voice?.model || currentConfig.tts.piperModel,
+      piperConfig: voice?.config || currentConfig.tts.piperConfig,
       piperLengthScale: currentConfig.tts.piperLengthScale,
       piperNoiseScale: currentConfig.tts.piperNoiseScale,
       piperNoiseWScale: currentConfig.tts.piperNoiseWScale,
@@ -239,6 +250,13 @@ async function saveSettings() {
   } finally {
     $('saveBtn').disabled = false;
   }
+}
+
+async function saveCurrentAsDefault() {
+  const names = selectedAnnouncementOutputNames();
+  for (const option of $('defaultOutputs').options) option.selected = names.includes(option.value);
+  $('defaultVoice').value = $('voice').value;
+  await saveSettings();
 }
 
 async function installVoice() {
@@ -278,6 +296,7 @@ async function sendPin() {
 
 $('sayBtn').addEventListener('click', say);
 $('saveBtn').addEventListener('click', saveSettings);
+$('saveCurrentBtn').addEventListener('click', saveCurrentAsDefault);
 $('refreshBtn').addEventListener('click', refresh);
 $('pinBtn').addEventListener('click', sendPin);
 $('installVoiceBtn').addEventListener('click', installVoice);
@@ -285,4 +304,5 @@ $('clearHistoryBtn').addEventListener('click', clearHistory);
 $('defaultOutputs').addEventListener('change', renderMqttExample);
 $('defaultVoice').addEventListener('change', renderMqttExample);
 $('volume').addEventListener('input', renderMqttExample);
+$('speed').addEventListener('input', renderMqttExample);
 refresh();

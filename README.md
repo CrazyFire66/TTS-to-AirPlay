@@ -5,6 +5,7 @@ Node.js-Server fuer kostenlose Offline-TTS-Ansagen, die per OwnTone/AirPlay auf 
 ## Funktionen
 
 - Web UI fuer Ansagen, HomePod-Auswahl, Standardziele, Lautstaerke und Stimmen
+- Aktuelle Ansage-Auswahl als Standard speichern
 - MQTT-Eingang fuer Automationen, z. B. Home Assistant, ioBroker oder Node-RED
 - Mehrere HomePods gleichzeitig per `outputNames`
 - Piper TTS als kostenlose Offline-Stimme
@@ -109,6 +110,13 @@ Wichtige Standardwerte:
 
 Standard-HomePods sollten ueber Namen gesetzt werden, nicht ueber IDs. Das geht direkt in der Weboberflaeche unter **Einstellungen -> Default Ziele**.
 
+In der Ansage-Box kann die aktuelle Auswahl mit **Auswahl als Standard speichern** dauerhaft gespeichert werden. Gespeichert werden:
+
+- gewaehlte Geraete
+- Stimme/Sprache
+- Lautstaerke
+- Tempo
+
 ## MQTT
 
 Einfacher Text:
@@ -124,7 +132,8 @@ JSON Payload:
   "text": "Haustuer wurde geoeffnet.",
   "outputNames": ["Wohnzimmer", "Schlafzimmer"],
   "voice": "de_DE-ramona-low",
-  "volume": 45
+  "volume": 45,
+  "speed": 165
 }
 ```
 
@@ -134,7 +143,8 @@ Mehrere HomePods gleichzeitig:
 {
   "text": "Guten Morgen.",
   "outputNames": ["Wohnzimmer", "Schlafzimmer"],
-  "volume": 50
+  "volume": 50,
+  "speed": 180
 }
 ```
 
