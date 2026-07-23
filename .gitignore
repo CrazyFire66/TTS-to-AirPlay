@@ -1,0 +1,11 @@
+node_modules/
+venv/
+config.json
+data/
+audio/
+backups/
+models/
+*.log
+*.wav
+*.tar.gz
+.DS_Store

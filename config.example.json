@@ -1,0 +1,52 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 16619,
+    "publicBaseUrl": "http://192.168.150.162:16619"
+  },
+  "mqtt": {
+    "enabled": true,
+    "host": "192.168.150.156",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "clientId": "homepod-tts-server",
+    "topics": {
+      "say": "tts/say",
+      "settings": "tts/settings",
+      "status": "tts/status"
+    }
+  },
+  "tts": {
+    "engine": "piper",
+    "voice": "de_DE-thorsten-medium",
+    "piperCommand": "/root/TTS/venv/bin/piper",
+    "piperModelDir": "/root/TTS/models/piper",
+    "piperModel": "/root/TTS/models/piper/de_DE-thorsten-medium.onnx",
+    "piperConfig": "/root/TTS/models/piper/de_DE-thorsten-medium.onnx.json",
+    "piperLengthScale": 1,
+    "piperNoiseScale": 0.667,
+    "piperNoiseWScale": 0.8,
+    "piperSpeaker": "",
+    "speed": 165,
+    "pitch": 50,
+    "amplitude": 160,
+    "maxTextLength": 1500,
+    "keepAudioFiles": 200
+  },
+  "owntone": {
+    "baseUrl": "http://127.0.0.1:3689",
+    "audioDirectory": "/srv/tts-audio",
+    "defaultOutputId": "",
+    "defaultOutputIds": [],
+    "defaultOutputName": "",
+    "defaultOutputNames": [],
+    "volume": 50,
+    "clearQueue": true,
+    "rescanWaitMs": 500,
+    "rescanPollAttempts": 30
+  },
+  "security": {
+    "apiToken": ""
+  }
+}

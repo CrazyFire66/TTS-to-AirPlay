@@ -1,0 +1,14 @@
+{
+  "name": "homepod-tts-server",
+  "version": "1.0.0",
+  "description": "Offline TTS to HomePods via OwnTone AirPlay with Web UI and MQTT input.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "license": "MIT"
+}

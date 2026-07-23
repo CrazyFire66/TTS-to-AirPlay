@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HomePod TTS</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>HomePod TTS</h1>
+      <p id="status">Verbinde...</p>
+    </div>
+    <button id="refreshBtn" title="Aktualisieren">↻</button>
+  </header>
+
+  <main class="layout">
+    <section class="panel speak">
+      <h2>Ansage</h2>
+      <textarea id="text" rows="6" placeholder="Text eingeben"></textarea>
+      <div class="row">
+        <label>
+          Ziel
+          <select id="output" multiple size="7"></select>
+        </label>
+        <label>
+          Stimme
+          <select id="voice"></select>
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          Lautstaerke
+          <input id="volume" type="number" min="0" max="100">
+        </label>
+        <label>
+          Tempo
+          <input id="speed" type="number" min="80" max="450">
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          AirPlay PIN
+          <input id="airplayPin" inputmode="numeric" autocomplete="one-time-code">
+        </label>
+        <button id="pinBtn">PIN senden</button>
+      </div>
+      <button id="sayBtn" class="primary">Abspielen</button>
+    </section>
+
+    <section class="panel">
+      <h2>Einstellungen</h2>
+      <div class="grid">
+        <label>
+          Default Ziele
+          <select id="defaultOutputs" multiple size="7"></select>
+        </label>
+        <label>
+          Default Stimme
+          <select id="defaultVoice"></select>
+        </label>
+        <label>
+          MQTT Broker
+          <input id="mqttHost">
+        </label>
+        <label>
+          MQTT Port
+          <input id="mqttPort" type="number" min="1" max="65535">
+        </label>
+        <label>
+          Topic Ansage
+          <input id="mqttSayTopic">
+        </label>
+        <label>
+          Topic Settings
+          <input id="mqttSettingsTopic">
+        </label>
+        <label>
+          OwnTone URL
+          <input id="owntoneUrl">
+        </label>
+        <label>
+          Audio-Ordner in OwnTone
+          <input id="audioDirectory">
+        </label>
+      </div>
+      <label class="check">
+        <input id="mqttEnabled" type="checkbox">
+        MQTT aktiv
+      </label>
+      <label class="check">
+        <input id="clearQueue" type="checkbox">
+        Warteschlange vor Ansage leeren
+      </label>
+      <button id="saveBtn">Einstellungen speichern</button>
+    </section>
+
+    <section class="panel">
+      <h2>Stimmen</h2>
+      <div class="grid">
+        <label>
+          Name
+          <input id="voiceName" value="de_DE-kerstin-low">
+        </label>
+        <label>
+          Modell URL
+          <input id="voiceModelUrl" value="https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/kerstin/low/de_DE-kerstin-low.onnx">
+        </label>
+        <label class="wide">
+          Config URL
+          <input id="voiceConfigUrl" value="https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/kerstin/low/de_DE-kerstin-low.onnx.json">
+        </label>
+      </div>
+      <label class="check">
+        <input id="voiceSetDefault" type="checkbox" checked>
+        Als Default setzen
+      </label>
+      <button id="installVoiceBtn">Stimme laden</button>
+    </section>
+
+    <section class="panel mqttPanel">
+      <h2>MQTT JSON Payload</h2>
+      <pre id="mqttExample"></pre>
+    </section>
+
+    <section class="panel historyPanel">
+      <div class="panelHeader">
+        <h2>Verlauf</h2>
+        <button id="clearHistoryBtn" class="dangerBtn">Verlauf löschen</button>
+      </div>
+      <div id="history" class="history"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
