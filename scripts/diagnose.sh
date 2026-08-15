@@ -17,6 +17,10 @@ systemctl --no-pager --full status owntone 2>&1 | sed -n '1,60p' || true
 systemctl --no-pager --full status forked-daapd 2>&1 | sed -n '1,60p' || true
 
 echo
+echo "== systemd: avahi-daemon =="
+systemctl --no-pager --full status avahi-daemon 2>&1 | sed -n '1,60p' || true
+
+echo
 echo "== app health =="
 curl -fsS "${APP_URL}/api/health" 2>&1 || true
 
@@ -32,14 +36,20 @@ curl -fsS "${OWNTONE_URL}/api/config" 2>&1 || true
 
 echo
 echo
+echo "== owntone library setting =="
+grep -n 'directories' /etc/owntone.conf /etc/forked-daapd.conf 2>&1 || true
+
+echo
+echo
 echo "== owntone outputs =="
 curl -fsS "${OWNTONE_URL}/api/outputs" 2>&1 || true
 
 echo
 echo
 echo "== files and permissions =="
-ls -ld /root /root/TTS /root/TTS/audio /srv/tts-audio 2>&1 || true
+ls -ld /root /root/TTS /root/TTS/audio /root/TTS/assets /root/TTS/downloads /srv/tts-audio 2>&1 || true
 find /srv/tts-audio -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM %p\n' 2>&1 | tail -20 || true
+find /root/TTS/downloads -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM %p\n' 2>&1 | tail -20 || true
 
 echo
 echo "== tts binary =="

@@ -37,7 +37,7 @@ Piper + optionale Audiodateien -> /srv/tts-audio
 OwnTone -> AirPlay -> HomePods
 ```
 
-## Installation
+## Plug-and-Play-Installation
 
 Zielsystem: Debian/Ubuntu, Root-Zugriff, Node.js >= 14, OwnTone im selben Netzwerk wie die HomePods.
 
@@ -48,16 +48,52 @@ cd /root/TTS
 bash scripts/install.sh
 ```
 
+Das Install-Script erledigt automatisch:
+
+- benötigte Pakete installieren: Node.js, ffmpeg, Python, Piper, espeak-ng, Avahi/mDNS
+- Standardstimme `de_DE-thorsten-medium` herunterladen
+- OwnTone/forked-daapd installieren, falls noch nicht vorhanden
+- OwnTone auf `/srv/tts-audio` als Library-Ordner konfigurieren
+- Web-URL anhand der Server-IP setzen
+- systemd-Service `homepod-tts` erstellen und starten
+- am Ende App- und OwnTone-Erreichbarkeit prüfen
+
 Weboberfläche:
 
 ```text
 http://SERVER-IP:16619
 ```
 
-Beispiel:
+Beispiel nach der Installation:
 
 ```text
 http://192.168.150.162:16619
+```
+
+Optionale Parameter:
+
+```bash
+TTS_MQTT_HOST=192.168.150.156 TTS_PORT=16619 bash scripts/install.sh
+```
+
+Wenn der Server mehrere Netzwerkkarten hat oder die Web-URL fest gesetzt werden soll:
+
+```bash
+TTS_SERVER_IP=192.168.150.162 bash scripts/install.sh
+```
+
+oder:
+
+```bash
+TTS_PUBLIC_BASE_URL=http://192.168.150.162:16619 bash scripts/install.sh
+```
+
+Nach der Installation auf der Webseite **AirPlay Geräte suchen** anklicken. Dadurch wird OwnTone neu gestartet und die aktuelle AirPlay-Ausgabeliste geladen.
+
+Wenn das Repository privat ist, statt HTTPS den SSH-Clone verwenden:
+
+```bash
+git clone git@github.com:CrazyFire66/TTS-to-AirPlay.git TTS
 ```
 
 ## Weboberfläche

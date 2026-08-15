@@ -6,27 +6,47 @@ SERVICE_FILE="/etc/systemd/system/homepod-tts.service"
 BACKUP_DIR="${APP_DIR}/backups"
 SHARED_AUDIO_DIR="/srv/tts-audio"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_PORT="${TTS_PORT:-16619}"
+MQTT_HOST="${TTS_MQTT_HOST:-192.168.150.156}"
+
+detect_server_ip() {
+  local ip=""
+  if command -v ip >/dev/null 2>&1; then
+    ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}')"
+  fi
+  if [[ -z "${ip}" ]]; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  echo "${ip:-127.0.0.1}"
+}
+
+unit_exists() {
+  systemctl list-unit-files "$1" 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"
+}
+
+SERVER_IP="${TTS_SERVER_IP:-$(detect_server_ip)}"
+PUBLIC_BASE_URL="${TTS_PUBLIC_BASE_URL:-http://${SERVER_IP}:${APP_PORT}}"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Bitte als root ausfuehren."
   exit 1
 fi
 
-mkdir -p "${APP_DIR}" "${BACKUP_DIR}" "${APP_DIR}/data" "${APP_DIR}/assets" "${SHARED_AUDIO_DIR}"
+mkdir -p "${APP_DIR}" "${BACKUP_DIR}" "${APP_DIR}/data" "${APP_DIR}/assets" "${APP_DIR}/downloads" "${SHARED_AUDIO_DIR}"
 
 if [[ "${SOURCE_DIR}" != "${APP_DIR}" ]]; then
   if [[ -f "${APP_DIR}/config.json" ]]; then
-    tar -czf "${BACKUP_DIR}/deploy-$(date +%Y%m%d-%H%M%S).tar.gz" -C "${APP_DIR}" config.json data audio 2>/dev/null || true
+    tar -czf "${BACKUP_DIR}/deploy-$(date +%Y%m%d-%H%M%S).tar.gz" -C "${APP_DIR}" config.json data audio assets downloads 2>/dev/null || true
   fi
-  rsync -a --exclude backups --exclude data --exclude audio --exclude config.json "${SOURCE_DIR}/" "${APP_DIR}/"
+  rsync -a --exclude backups --exclude data --exclude audio --exclude assets --exclude downloads --exclude config.json "${SOURCE_DIR}/" "${APP_DIR}/"
 fi
 
 cd "${APP_DIR}"
 
-if ! command -v node >/dev/null 2>&1 || ! command -v espeak-ng >/dev/null 2>&1 || ! command -v rsync >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "Installiere benoetigte Pakete: nodejs, espeak-ng, rsync, curl, python3, ffmpeg"
+if ! command -v node >/dev/null 2>&1 || ! command -v espeak-ng >/dev/null 2>&1 || ! command -v rsync >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1 || ! command -v avahi-daemon >/dev/null 2>&1 || ! dpkg -s libnss-mdns >/dev/null 2>&1; then
+  echo "Installiere benoetigte Pakete: nodejs, espeak-ng, rsync, curl, python3, ffmpeg, avahi-daemon"
   apt-get update
-  apt-get install -y nodejs espeak-ng rsync curl python3 ffmpeg
+  apt-get install -y nodejs espeak-ng rsync curl python3 ffmpeg avahi-daemon libnss-mdns
 fi
 
 if [[ ! -d "${APP_DIR}/venv" ]]; then
@@ -54,33 +74,46 @@ fi
 
 node -e "const major=Number(process.versions.node.split('.')[0]); if (major < 14) { console.error('Node.js >=14 ist erforderlich. Gefunden: ' + process.versions.node); process.exit(1); }"
 
-if ! systemctl list-unit-files owntone.service >/dev/null 2>&1 && ! systemctl list-unit-files forked-daapd.service >/dev/null 2>&1; then
+if ! unit_exists owntone.service && ! unit_exists forked-daapd.service; then
   echo "Installiere OwnTone/forked-daapd"
   if ! apt-get install -y owntone; then
     apt-get install -y forked-daapd
   fi
 fi
 
-if systemctl list-unit-files owntone.service >/dev/null 2>&1; then
+if unit_exists owntone.service; then
   AIRPLAY_SERVICE="owntone.service"
-elif systemctl list-unit-files forked-daapd.service >/dev/null 2>&1; then
+elif unit_exists forked-daapd.service; then
   AIRPLAY_SERVICE="forked-daapd.service"
 else
   AIRPLAY_SERVICE="network-online.target"
 fi
 
+CONFIG_CREATED=0
 if [[ ! -f "${APP_DIR}/config.json" ]]; then
   cp "${APP_DIR}/config.example.json" "${APP_DIR}/config.json"
+  CONFIG_CREATED=1
 fi
 
-node - "${APP_DIR}/config.json" <<'NODE'
+node - "${APP_DIR}/config.json" "${CONFIG_CREATED}" "${PUBLIC_BASE_URL}" "${APP_PORT}" "${MQTT_HOST}" <<'NODE'
 const fs = require('fs');
 const file = process.argv[2];
+const created = process.argv[3] === '1';
+const publicBaseUrl = process.argv[4];
+const port = Number(process.argv[5]);
+const mqttHost = process.argv[6];
 const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+config.server = config.server || {};
+if (created || process.env.TTS_PUBLIC_BASE_URL || !config.server.publicBaseUrl || config.server.publicBaseUrl === 'http://192.168.150.162:16619') {
+  config.server.publicBaseUrl = publicBaseUrl;
+}
+if (created || process.env.TTS_PORT) config.server.port = port;
 config.owntone = config.owntone || {};
 if (!config.owntone.audioDirectory || config.owntone.audioDirectory === '/root/TTS/audio') {
   config.owntone.audioDirectory = '/srv/tts-audio';
 }
+config.mqtt = config.mqtt || {};
+if (created || process.env.TTS_MQTT_HOST) config.mqtt.host = mqttHost;
 fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n');
 NODE
 
@@ -93,8 +126,48 @@ chmod 755 "${APP_DIR}"
 chmod 755 "${SHARED_AUDIO_DIR}"
 chmod 755 "${APP_DIR}/scripts"
 chmod 755 "${APP_DIR}/assets"
+chmod 755 "${APP_DIR}/downloads"
+
+configure_owntone_library() {
+  local conf=""
+  if [[ -f /etc/owntone.conf ]]; then
+    conf="/etc/owntone.conf"
+  elif [[ -f /etc/forked-daapd.conf ]]; then
+    conf="/etc/forked-daapd.conf"
+  else
+    return 0
+  fi
+
+  cp "${conf}" "${BACKUP_DIR}/$(basename "${conf}")-$(date +%Y%m%d-%H%M%S).bak"
+  node - "${conf}" "${SHARED_AUDIO_DIR}" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const audioDir = process.argv[3];
+let text = fs.readFileSync(file, 'utf8');
+const wanted = `directories = { "${audioDir}" }`;
+const blockPattern = /^[ \t]*directories\s*=\s*\{[\s\S]*?^[ \t]*\}[ \t]*$/m;
+if (blockPattern.test(text)) {
+  text = text.replace(blockPattern, wanted);
+} else if (/^[ \t]*directories\s*=.*$/m.test(text)) {
+  text = text.replace(/^\s*directories\s*=.*$/m, wanted);
+} else {
+  text += `\n${wanted}\n`;
+}
+fs.writeFileSync(file, text);
+NODE
+}
 
 node --check "${APP_DIR}/server.js"
+
+configure_owntone_library
+
+systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
+systemctl restart avahi-daemon >/dev/null 2>&1 || true
+
+if [[ "${AIRPLAY_SERVICE}" == "owntone.service" || "${AIRPLAY_SERVICE}" == "forked-daapd.service" ]]; then
+  systemctl enable --now "${AIRPLAY_SERVICE}" >/dev/null 2>&1 || true
+  systemctl restart "${AIRPLAY_SERVICE}" >/dev/null 2>&1 || true
+fi
 
 cat > "${SERVICE_FILE}" <<UNIT
 [Unit]
@@ -110,6 +183,8 @@ Restart=always
 RestartSec=3
 User=root
 Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=${APP_PORT}
 
 [Install]
 WantedBy=multi-user.target
@@ -117,10 +192,28 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now homepod-tts
+systemctl restart homepod-tts
+
+sleep 2
+
+APP_HEALTH="nicht erreichbar"
+if curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
+  APP_HEALTH="OK"
+fi
+
+OWNTONE_HEALTH="nicht erreichbar"
+if curl -fsS "http://127.0.0.1:3689/api/outputs" >/dev/null 2>&1; then
+  OWNTONE_HEALTH="OK"
+fi
 
 echo
 echo "HomePod TTS laeuft als systemd Service."
-echo "Web UI: http://192.168.150.162:16619"
+echo "Web UI: ${PUBLIC_BASE_URL}"
+echo "App Health: ${APP_HEALTH}"
+echo "OwnTone API: ${OWNTONE_HEALTH}"
 echo
-echo "Wichtig: OwnTone muss ${SHARED_AUDIO_DIR} als Library-Ordner scannen koennen."
-echo "Falls Ansagen erzeugt, aber nicht gefunden werden, pruefe /etc/owntone.conf und die Rechte auf ${SHARED_AUDIO_DIR}."
+echo "OwnTone wurde auf ${SHARED_AUDIO_DIR} als Library-Ordner gesetzt, falls die Config-Datei vorhanden war."
+echo "Wenn HomePods nicht erscheinen: Webseite oeffnen und 'AirPlay Geraete suchen' klicken."
+echo
+echo "Optionale Install-Parameter:"
+echo "  TTS_MQTT_HOST=192.168.150.156 TTS_PORT=16619 bash scripts/install.sh"
