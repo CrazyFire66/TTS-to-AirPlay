@@ -16,6 +16,7 @@ const DATA_DIR = path.join(ROOT, 'data');
 const BACKUP_DIR = path.join(ROOT, 'backups');
 const LOCAL_AUDIO_DIR = path.join(ROOT, 'audio');
 const AUDIO_ASSET_DIR = path.join(ROOT, 'assets');
+const DOWNLOAD_DIR = path.join(ROOT, 'downloads');
 const HISTORY_PATH = path.join(DATA_DIR, 'history.jsonl');
 const DEFAULT_PIPER_MODEL_DIR = '/root/TTS/models/piper';
 
@@ -104,6 +105,7 @@ async function ensureDirs() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
   await fsp.mkdir(BACKUP_DIR, { recursive: true });
   await fsp.mkdir(LOCAL_AUDIO_DIR, { recursive: true });
+  await fsp.mkdir(DOWNLOAD_DIR, { recursive: true });
   await fsp.mkdir(config?.audio?.assetsDirectory || AUDIO_ASSET_DIR, { recursive: true });
 }
 
@@ -273,6 +275,20 @@ function audioAssetPath(name) {
   const full = path.resolve(audioAssetDir(), fileName);
   const root = path.resolve(audioAssetDir());
   if (!full.startsWith(`${root}${path.sep}`) && full !== root) throw new Error('Ungueltiger Audiodateiname.');
+  return full;
+}
+
+function safeDownloadName(value) {
+  const parsed = path.parse(String(value || 'tts-audio.wav'));
+  const base = parsed.name.replace(/[^a-zA-Z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || 'tts-audio';
+  return `${base}.wav`;
+}
+
+function downloadFilePath(name) {
+  const fileName = safeDownloadName(name);
+  const full = path.resolve(DOWNLOAD_DIR, fileName);
+  const root = path.resolve(DOWNLOAD_DIR);
+  if (!full.startsWith(`${root}${path.sep}`) && full !== root) throw new Error('Ungueltiger Download-Dateiname.');
   return full;
 }
 
@@ -660,6 +676,25 @@ async function deleteAudioAsset(name) {
   return { ok: true, name: safeAssetName(name) };
 }
 
+async function listDownloadFiles() {
+  await ensureDirs();
+  const entries = await fsp.readdir(DOWNLOAD_DIR, { withFileTypes: true }).catch(() => []);
+  const files = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.wav')) continue;
+    const full = path.join(DOWNLOAD_DIR, entry.name);
+    const stat = await fsp.stat(full).catch(() => null);
+    if (!stat) continue;
+    files.push({
+      name: entry.name,
+      size: stat.size,
+      mtime: stat.mtime.toISOString(),
+      url: `/api/downloads/file?name=${encodeURIComponent(entry.name)}`
+    });
+  }
+  return files.sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+}
+
 function firstValue(...values) {
   for (const value of values) {
     if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
@@ -921,6 +956,67 @@ function enqueueSay(request) {
   return job;
 }
 
+async function createDownloadFile(request) {
+  const rawText = String(request.text || request.message || request.payload || '').trim();
+  const text = rawText ? sanitizeText(rawText) : '';
+  const generated = text
+    ? await combineAudioAttachments(await synthesize(text, request), request)
+    : await createAudioOnlyPlayback(request);
+
+  await ensureDirs();
+  const targetName = safeDownloadName(request.name || request.fileName || generated.fileBase);
+  const targetPath = downloadFilePath(targetName);
+  await backupBinaryFile(targetPath, 'download-overwrite');
+  await fsp.copyFile(generated.localPath, targetPath);
+  await cleanupAudioFiles();
+  const stat = await fsp.stat(targetPath);
+  const file = {
+    name: targetName,
+    size: stat.size,
+    mtime: stat.mtime.toISOString(),
+    url: `/api/downloads/file?name=${encodeURIComponent(targetName)}`
+  };
+  const entry = {
+    type: 'download-create',
+    ok: true,
+    text,
+    voice: request.voice || config.tts.voice,
+    audio: generated.audio || '',
+    audioBefore: generated.audioBefore || '',
+    audioAfter: generated.audioAfter || '',
+    file: targetPath,
+    name: targetName,
+    size: stat.size
+  };
+  await appendHistory(entry);
+  setStatus(true, `Download-Datei erstellt: ${targetName}`, entry);
+  return { ok: true, file };
+}
+
+async function deleteDownloadFile(name) {
+  if (!firstValue(name)) throw new Error('Download-Dateiname fehlt.');
+  const targetName = safeDownloadName(name);
+  const target = downloadFilePath(targetName);
+  await backupBinaryFile(target, 'download-delete');
+  await fsp.unlink(target);
+  await appendHistory({ type: 'download-delete', ok: true, name: targetName });
+  return { ok: true, name: targetName };
+}
+
+async function sendDownloadFile(res, name) {
+  if (!firstValue(name)) throw new Error('Download-Dateiname fehlt.');
+  const targetName = safeDownloadName(name);
+  const target = downloadFilePath(targetName);
+  const stat = await fsp.stat(target);
+  res.writeHead(200, {
+    'content-type': 'audio/wav',
+    'content-length': stat.size,
+    'content-disposition': `attachment; filename="${targetName}"`,
+    'cache-control': 'no-store'
+  });
+  fs.createReadStream(target).pipe(res);
+}
+
 function setStatus(ok, message, extra = {}) {
   lastStatus = { ok, message, at: new Date().toISOString(), ...extra };
   mqttPublishStatus(lastStatus);
@@ -1031,6 +1127,19 @@ async function handleApi(req, res, url) {
     }
     if (req.method === 'DELETE' && url.pathname === '/api/audio') {
       return jsonResponse(res, 200, await deleteAudioAsset(url.searchParams.get('name') || ''));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/downloads') {
+      return jsonResponse(res, 200, { files: await listDownloadFiles() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/downloads') {
+      const body = await parseRequestBody(req);
+      return jsonResponse(res, 200, { ...(await createDownloadFile(body)), files: await listDownloadFiles() });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/downloads/file') {
+      return sendDownloadFile(res, url.searchParams.get('name') || '');
+    }
+    if (req.method === 'DELETE' && url.pathname === '/api/downloads') {
+      return jsonResponse(res, 200, await deleteDownloadFile(url.searchParams.get('name') || ''));
     }
     if (req.method === 'GET' && url.pathname === '/api/outputs') {
       return jsonResponse(res, 200, { outputs: await getOutputs() });

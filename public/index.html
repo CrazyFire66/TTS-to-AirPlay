@@ -22,6 +22,7 @@
     <button class="navButton active" data-view-target="speak">Ansage</button>
     <button class="navButton" data-view-target="settings">Einstellungen</button>
     <button class="navButton" data-view-target="audio">Audio</button>
+    <button class="navButton" data-view-target="downloads">Download</button>
     <button class="navButton" data-view-target="voices">Stimmen</button>
     <button class="navButton" data-view-target="mqtt">MQTT</button>
     <button class="navButton" data-view-target="history">Verlauf</button>
@@ -151,6 +152,39 @@
       </div>
       <button id="uploadAudioBtn">Audio hochladen</button>
       <div id="audioList" class="fileList"></div>
+    </section>
+
+    <section class="panel view" data-view="downloads">
+      <h2>Download</h2>
+      <textarea id="downloadText" rows="5" placeholder="Text für neue Audiodatei eingeben"></textarea>
+      <div class="grid">
+        <label>
+          Dateiname
+          <input id="downloadName" placeholder="tuerklingel.wav">
+        </label>
+        <label>
+          Stimme
+          <select id="downloadVoice"></select>
+        </label>
+        <label>
+          Tempo
+          <input id="downloadSpeed" type="number" min="80" max="450">
+        </label>
+        <label>
+          Nur Audio
+          <select id="downloadAudioOnly"></select>
+        </label>
+        <label>
+          Audio vorher
+          <select id="downloadAudioBefore"></select>
+        </label>
+        <label>
+          Audio nachher
+          <select id="downloadAudioAfter"></select>
+        </label>
+      </div>
+      <button id="createDownloadBtn">Audiodatei erstellen</button>
+      <div id="downloadList" class="fileList"></div>
     </section>
 
     <section class="panel view" data-view="voices">

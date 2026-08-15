@@ -188,6 +188,23 @@ button {
   cursor: pointer;
 }
 
+.buttonLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 42px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 13px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 button:hover {
   border-color: var(--accent);
 }
@@ -228,7 +245,8 @@ button:disabled {
 
 #saveBtn,
 #installVoiceBtn,
-#uploadAudioBtn {
+#uploadAudioBtn,
+#createDownloadBtn {
   margin-top: 16px;
 }
 
@@ -284,6 +302,12 @@ pre {
   min-width: 0;
 }
 
+.fileActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .fileItem strong,
 .fileItem small {
   overflow-wrap: anywhere;
@@ -323,6 +347,7 @@ pre {
   .layout,
   .row,
   .actions,
+  .fileActions,
   .fileItem,
   .grid {
     grid-template-columns: 1fr;

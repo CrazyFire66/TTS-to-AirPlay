@@ -3,6 +3,7 @@ let currentConfig = null;
 let outputs = [];
 let voices = [];
 let audioFiles = [];
+let downloadFiles = [];
 
 async function api(path, options = {}) {
   const isForm = options.body instanceof FormData;
@@ -41,6 +42,7 @@ function fillConfig() {
   $('audioDirectory').value = currentConfig.owntone.audioDirectory || '';
   $('volume').value = currentConfig.owntone.volume ?? 50;
   $('speed').value = currentConfig.tts.speed ?? 165;
+  $('downloadSpeed').value = currentConfig.tts.speed ?? 165;
   $('clearQueue').checked = Boolean(currentConfig.owntone.clearQueue);
 }
 
@@ -102,6 +104,7 @@ function fillVoiceSelect(select, selectedValue) {
 function fillVoices() {
   fillVoiceSelect($('voice'), currentConfig?.tts?.voice);
   fillVoiceSelect($('defaultVoice'), currentConfig?.tts?.voice);
+  fillVoiceSelect($('downloadVoice'), currentConfig?.tts?.voice);
 }
 
 function fillAudioSelect(select, selectedValue) {
@@ -115,9 +118,19 @@ function fillAudio() {
   fillAudioSelect($('audioOnly'), '');
   fillAudioSelect($('audioBefore'), currentConfig?.audio?.defaultBefore);
   fillAudioSelect($('audioAfter'), currentConfig?.audio?.defaultAfter);
+  fillAudioSelect($('downloadAudioOnly'), '');
+  fillAudioSelect($('downloadAudioBefore'), currentConfig?.audio?.defaultBefore);
+  fillAudioSelect($('downloadAudioAfter'), currentConfig?.audio?.defaultAfter);
   fillAudioSelect($('defaultAudioBefore'), currentConfig?.audio?.defaultBefore);
   fillAudioSelect($('defaultAudioAfter'), currentConfig?.audio?.defaultAfter);
   renderAudioList();
+  renderDownloadList();
+}
+
+function formatBytes(size) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function selectedOutputNames(selectId) {
@@ -180,13 +193,49 @@ function renderAudioList() {
     const strong = document.createElement('strong');
     strong.textContent = file.name;
     const small = document.createElement('small');
-    small.textContent = `${Math.round(file.size / 1024)} KB`;
+    small.textContent = formatBytes(file.size);
     meta.append(strong, small);
     const button = document.createElement('button');
     button.className = 'dangerBtn';
     button.textContent = 'Löschen';
     button.addEventListener('click', () => deleteAudio(file.name));
     div.append(meta, button);
+    node.append(div);
+  }
+}
+
+function renderDownloadList() {
+  const node = $('downloadList');
+  node.innerHTML = '';
+  if (!downloadFiles.length) {
+    const div = document.createElement('div');
+    div.className = 'item muted';
+    div.textContent = 'Noch keine Download-Dateien erstellt.';
+    node.append(div);
+    return;
+  }
+  for (const file of downloadFiles) {
+    const div = document.createElement('div');
+    div.className = 'fileItem';
+    const meta = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = file.name;
+    const small = document.createElement('small');
+    small.textContent = `${formatBytes(file.size)} · ${new Date(file.mtime).toLocaleString('de-DE')}`;
+    meta.append(strong, small);
+    const actions = document.createElement('div');
+    actions.className = 'fileActions';
+    const link = document.createElement('a');
+    link.className = 'buttonLink';
+    link.href = file.url;
+    link.download = file.name;
+    link.textContent = 'Herunterladen';
+    const button = document.createElement('button');
+    button.className = 'dangerBtn';
+    button.textContent = 'Löschen';
+    button.addEventListener('click', () => deleteDownload(file.name));
+    actions.append(link, button);
+    div.append(meta, actions);
     node.append(div);
   }
 }
@@ -234,18 +283,20 @@ async function clearHistory() {
 async function refresh() {
   try {
     setStatus('Lade…');
-    const [configData, outputData, voiceData, historyData, audioData, healthData] = await Promise.all([
+    const [configData, outputData, voiceData, historyData, audioData, downloadData, healthData] = await Promise.all([
       api('/api/config'),
       api('/api/outputs').catch(err => ({ outputs: [], error: err.message })),
       api('/api/voices'),
       api('/api/history'),
       api('/api/audio'),
+      api('/api/downloads'),
       api('/api/health')
     ]);
     currentConfig = configData;
     outputs = outputData.outputs || [];
     voices = voiceData.voices || [];
     audioFiles = audioData.files || [];
+    downloadFiles = downloadData.files || [];
     fillConfig();
     fillOutputs();
     fillDefaultOutputs();
@@ -392,6 +443,41 @@ async function uploadAudio() {
   }
 }
 
+async function createDownload() {
+  const directAudio = $('downloadAudioOnly').value;
+  const payload = {
+    name: $('downloadName').value.trim(),
+    text: directAudio ? '' : $('downloadText').value,
+    voice: $('downloadVoice').value,
+    speed: Number($('downloadSpeed').value),
+    audio: directAudio,
+    audioBefore: directAudio ? '' : $('downloadAudioBefore').value,
+    audioAfter: directAudio ? '' : $('downloadAudioAfter').value
+  };
+  try {
+    $('createDownloadBtn').disabled = true;
+    setStatus('Erstelle Download-Datei…');
+    const data = await api('/api/downloads', { method: 'POST', body: JSON.stringify(payload) });
+    downloadFiles = data.files || [];
+    renderDownloadList();
+    setStatus(`Download-Datei erstellt: ${data.file?.name || 'fertig'}`);
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    $('createDownloadBtn').disabled = false;
+  }
+}
+
+async function deleteDownload(name) {
+  if (!window.confirm(`${name} wirklich löschen? Es wird vorher ein Backup gespeichert.`)) return;
+  try {
+    await api(`/api/downloads?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await refresh();
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
 async function deleteAudio(name) {
   if (!window.confirm(`${name} wirklich löschen? Es wird vorher ein Backup gespeichert.`)) return;
   try {
@@ -447,6 +533,7 @@ $('pinBtn').addEventListener('click', sendPin);
 $('installVoiceBtn').addEventListener('click', installVoice);
 $('clearHistoryBtn').addEventListener('click', clearHistory);
 $('uploadAudioBtn').addEventListener('click', uploadAudio);
+$('createDownloadBtn').addEventListener('click', createDownload);
 $('defaultOutputs').addEventListener('change', renderMqttExample);
 $('defaultVoice').addEventListener('change', renderMqttExample);
 $('defaultAudioBefore').addEventListener('change', renderMqttExample);

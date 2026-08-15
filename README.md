@@ -4,7 +4,7 @@ Node.js-Server für kostenlose Offline-TTS-Ansagen, die per OwnTone/AirPlay auf 
 
 ## Funktionen
 
-- Weboberfläche mit Menübereichen für Ansage, Einstellungen, Audio, Stimmen, MQTT und Verlauf
+- Weboberfläche mit Menübereichen für Ansage, Einstellungen, Audio, Download, Stimmen, MQTT und Verlauf
 - AirPlay-Geräte über die Webseite neu suchen
 - MQTT-Eingang für Automationen, z. B. Home Assistant, ioBroker oder Node-RED
 - Mehrere HomePods gleichzeitig per `outputNames`
@@ -14,6 +14,7 @@ Node.js-Server für kostenlose Offline-TTS-Ansagen, die per OwnTone/AirPlay auf 
 - Piper-Stimmen über die Weboberfläche laden
 - Audiodateien hochladen und vor/nach Ansagen abspielen
 - Audiodateien auch ohne TTS-Text direkt abspielen
+- TTS- und Audio-Dateien über die Weboberfläche erstellen und herunterladen
 - Aktuelle Ansage-Auswahl als Standard speichern
 - Verlauf anzeigen und mit Backup löschen
 - Automatische Backups bei Konfigurationsänderungen
@@ -66,6 +67,7 @@ Die Oberfläche ist in Menübereiche aufgeteilt:
 - **Ansage**: Text, Zielgeräte, Stimme, Lautstärke, Tempo, direktes Audio und Audio vorher/nachher auswählen
 - **Einstellungen**: Standardziele, Standardstimme, MQTT, OwnTone und Standard-Audio speichern
 - **Audio**: Audiodateien hochladen und löschen
+- **Download**: neue TTS-/Audio-Dateien erstellen, herunterladen und löschen
 - **Stimmen**: Piper-Stimmen laden
 - **MQTT**: Beispiel-Payload passend zu den aktuellen Einstellungen
 - **Verlauf**: Verlauf ansehen und mit Backup löschen
@@ -228,6 +230,50 @@ Alias-Felder funktionieren ebenfalls: `beforeAudio`, `intro`, `introAudio`, `aft
 
 Damit unterschiedliche Dateiformate und Sampleraten sauber an Piper-TTS angehängt werden können, nutzt der Server `ffmpeg`.
 
+## Download-Dateien
+
+Im Menübereich **Download** können Audiodateien erstellt werden, ohne sie direkt auf den HomePods abzuspielen. Möglich sind:
+
+- TTS aus Text
+- TTS mit Audio vorher/nachher
+- reine Audiodateien ohne TTS-Text
+
+Die Dateien werden als WAV gespeichert und können direkt im Browser heruntergeladen werden. Sie liegen auf dem Server hier:
+
+```text
+/root/TTS/downloads
+```
+
+Beim Überschreiben oder Löschen einer Download-Datei wird vorher ein Backup unter `/root/TTS/backups` erstellt.
+
+API-Beispiel:
+
+```bash
+curl -X POST http://127.0.0.1:16619/api/downloads \
+  -H 'content-type: application/json' \
+  --data '{"name":"tuerklingel.wav","text":"Es hat geklingelt.","voice":"de_DE-ramona-low","audioBefore":"gong.wav"}'
+```
+
+Nur Audio als Download-Datei:
+
+```bash
+curl -X POST http://127.0.0.1:16619/api/downloads \
+  -H 'content-type: application/json' \
+  --data '{"name":"gong-kopie.wav","audio":"gong.wav"}'
+```
+
+Vorhandene Download-Dateien auflisten:
+
+```bash
+curl http://127.0.0.1:16619/api/downloads
+```
+
+Eine Datei herunterladen:
+
+```text
+http://127.0.0.1:16619/api/downloads/file?name=tuerklingel.wav
+```
+
 ## Stimmen
 
 Standardstimme:
@@ -286,6 +332,10 @@ POST   /api/outputs/auth
 GET    /api/audio
 POST   /api/audio
 DELETE /api/audio?name=DATEI
+GET    /api/downloads
+POST   /api/downloads
+GET    /api/downloads/file?name=DATEI
+DELETE /api/downloads?name=DATEI
 GET    /api/voices
 POST   /api/voices/install
 POST   /api/say
