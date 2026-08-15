@@ -53,6 +53,7 @@ Das Install-Script erledigt automatisch:
 - benötigte Pakete installieren: Node.js, ffmpeg, Python, Piper, espeak-ng, Avahi/mDNS
 - Standardstimme `de_DE-thorsten-medium` herunterladen
 - OwnTone/forked-daapd installieren, falls noch nicht vorhanden
+- falls Ubuntu kein OwnTone-Paket anbietet: OwnTone automatisch aus dem offiziellen Quellcode bauen
 - OwnTone auf `/srv/tts-audio` als Library-Ordner konfigurieren
 - Web-URL anhand der Server-IP setzen
 - systemd-Service `homepod-tts` erstellen und starten
@@ -74,6 +75,12 @@ Optionale Parameter:
 
 ```bash
 TTS_MQTT_HOST=192.168.150.156 TTS_PORT=16619 bash scripts/install.sh
+```
+
+Wenn OwnTone aus dem Quellcode gebaut werden muss, kann der erste Installationslauf je nach Server einige Minuten dauern. Die verwendete OwnTone-Version kann bei Bedarf gesetzt werden:
+
+```bash
+TTS_OWNTONE_VERSION=29.0 bash scripts/install.sh
 ```
 
 Wenn der Server mehrere Netzwerkkarten hat oder die Web-URL fest gesetzt werden soll:

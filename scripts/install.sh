@@ -8,6 +8,7 @@ SHARED_AUDIO_DIR="/srv/tts-audio"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_PORT="${TTS_PORT:-16619}"
 MQTT_HOST="${TTS_MQTT_HOST:-192.168.150.156}"
+OWNTONE_VERSION="${TTS_OWNTONE_VERSION:-29.0}"
 
 detect_server_ip() {
   local ip=""
@@ -31,6 +32,39 @@ if [[ "${EUID}" -ne 0 ]]; then
   echo "Bitte als root ausfuehren."
   exit 1
 fi
+
+install_owntone_from_source() {
+  local version="${OWNTONE_VERSION}"
+  local build_root="/usr/local/src"
+  local archive="${build_root}/owntone-${version}.tar.gz"
+  local source_dir="${build_root}/owntone-server-${version}"
+
+  echo "OwnTone ist nicht als apt-Paket verfuegbar. Baue OwnTone ${version} aus dem offiziellen Quellcode."
+  apt-get update
+  apt-get install -y \
+    build-essential git autotools-dev autoconf automake libtool gettext gawk \
+    pkg-config gperf bison flex libconfuse-dev libunistring-dev libsqlite3-dev \
+    libavcodec-dev libavformat-dev libavfilter-dev libswscale-dev libavutil-dev \
+    libasound2-dev libxml2-dev libgcrypt20-dev libavahi-client-dev zlib1g-dev \
+    libevent-dev libplist-dev libsodium-dev libjson-c-dev libwebsockets-dev \
+    libcurl4-openssl-dev libprotobuf-c-dev
+
+  mkdir -p "${build_root}"
+  if [[ ! -f "${archive}" ]]; then
+    curl -L --fail -o "${archive}" "https://github.com/owntone/owntone-server/archive/refs/tags/${version}.tar.gz"
+  fi
+  if [[ -d "${source_dir}" ]]; then
+    mv "${source_dir}" "${source_dir}-$(date +%Y%m%d-%H%M%S).bak"
+  fi
+  tar -xzf "${archive}" -C "${build_root}"
+  cd "${source_dir}"
+  autoreconf -i
+  ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-install-user
+  make -j"$(nproc)"
+  make install
+  cd "${APP_DIR}"
+  systemctl daemon-reload
+}
 
 mkdir -p "${APP_DIR}" "${BACKUP_DIR}" "${APP_DIR}/data" "${APP_DIR}/assets" "${APP_DIR}/downloads" "${SHARED_AUDIO_DIR}"
 
@@ -77,7 +111,9 @@ node -e "const major=Number(process.versions.node.split('.')[0]); if (major < 14
 if ! unit_exists owntone.service && ! unit_exists forked-daapd.service; then
   echo "Installiere OwnTone/forked-daapd"
   if ! apt-get install -y owntone; then
-    apt-get install -y forked-daapd
+    if ! apt-get install -y forked-daapd; then
+      install_owntone_from_source
+    fi
   fi
 fi
 
