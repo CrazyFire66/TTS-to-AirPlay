@@ -181,15 +181,40 @@ const file = process.argv[2];
 const audioDir = process.argv[3];
 let text = fs.readFileSync(file, 'utf8');
 const wanted = `directories = { "${audioDir}" }`;
-const blockPattern = /^[ \t]*directories\s*=\s*\{[\s\S]*?^[ \t]*\}[ \t]*$/m;
-if (blockPattern.test(text)) {
-  text = text.replace(blockPattern, wanted);
-} else if (/^[ \t]*directories\s*=.*$/m.test(text)) {
-  text = text.replace(/^\s*directories\s*=.*$/m, wanted);
-} else {
-  text += `\n${wanted}\n`;
+
+function braceDelta(line) {
+  return (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
 }
-fs.writeFileSync(file, text);
+
+const lines = text.split(/\n/);
+const start = lines.findIndex(line => /^\s*library\s*\{/.test(line));
+
+if (start === -1) {
+  lines.push('', 'library {', `\t${wanted}`, '}');
+} else {
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < lines.length; i += 1) {
+    depth += braceDelta(lines[i]);
+    if (i > start && depth <= 0) {
+      end = i;
+      break;
+    }
+  }
+  if (end === -1) {
+    throw new Error(`library-Block in ${file} ist nicht geschlossen.`);
+  }
+
+  const dirLine = lines.findIndex((line, index) => index > start && index < end && /^\s*#?\s*directories\s*=/.test(line));
+  if (dirLine === -1) {
+    lines.splice(start + 1, 0, `\t${wanted}`);
+  } else {
+    const indent = lines[dirLine].match(/^\s*/)?.[0] || '\t';
+    lines[dirLine] = `${indent}${wanted}`;
+  }
+}
+
+fs.writeFileSync(file, lines.join('\n'));
 NODE
 }
 

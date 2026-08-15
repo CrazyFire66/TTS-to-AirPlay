@@ -1076,6 +1076,29 @@ async function refreshAirPlayOutputs() {
   return { ok: true, service, outputs };
 }
 
+async function getHealthSnapshot() {
+  const health = { ok: true, status: lastStatus, configPath: CONFIG_PATH };
+  try {
+    const outputs = await getOutputs();
+    health.owntone = { ok: true, outputs: outputs.length };
+    if (health.status?.ok === false) {
+      health.status = {
+        ok: true,
+        message: `Bereit: OwnTone erreichbar (${outputs.length} Ausgänge)`,
+        at: new Date().toISOString()
+      };
+    }
+  } catch (err) {
+    health.owntone = { ok: false, message: err.message };
+    health.status = {
+      ok: false,
+      message: `OwnTone nicht erreichbar: ${err.message}`,
+      at: new Date().toISOString()
+    };
+  }
+  return health;
+}
+
 async function serveStatic(url, res) {
   const target = url.pathname === '/' ? '/index.html' : url.pathname;
   const filePath = path.normalize(path.join(PUBLIC_DIR, target));
@@ -1101,7 +1124,7 @@ async function handleApi(req, res, url) {
 
   try {
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return jsonResponse(res, 200, { ok: true, status: lastStatus, configPath: CONFIG_PATH });
+      return jsonResponse(res, 200, await getHealthSnapshot());
     }
     if (req.method === 'GET' && url.pathname === '/api/config') {
       const safeConfig = merge(config, { security: { apiToken: config.security.apiToken ? '********' : '' } });

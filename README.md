@@ -43,6 +43,8 @@ Zielsystem: Debian/Ubuntu, Root-Zugriff, Node.js >= 14, OwnTone im selben Netzwe
 
 ```bash
 cd /root
+apt-get update
+apt-get install -y git ca-certificates
 git clone https://github.com/CrazyFire66/TTS-to-AirPlay.git TTS
 cd /root/TTS
 bash scripts/install.sh
@@ -97,10 +99,15 @@ TTS_PUBLIC_BASE_URL=http://192.168.150.162:16619 bash scripts/install.sh
 
 Nach der Installation auf der Webseite **AirPlay Geräte suchen** anklicken. Dadurch wird OwnTone neu gestartet und die aktuelle AirPlay-Ausgabeliste geladen.
 
-Wenn das Repository privat ist, statt HTTPS den SSH-Clone verwenden:
+Wenn das Repository privat ist, funktioniert HTTPS nur mit GitHub-Anmeldung oder Token. Einfacher ist dann der SSH-Clone, vorausgesetzt der Server hat einen passenden GitHub-SSH-Key:
 
 ```bash
+cd /root
+apt-get update
+apt-get install -y git ca-certificates
 git clone git@github.com:CrazyFire66/TTS-to-AirPlay.git TTS
+cd /root/TTS
+bash scripts/install.sh
 ```
 
 ## Weboberfläche
